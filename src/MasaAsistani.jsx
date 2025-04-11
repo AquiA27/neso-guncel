@@ -3,6 +3,8 @@ import axios from "axios";
 import { useParams } from "react-router-dom";
 
 function MasaAsistani() {
+  console.log("🔥 Cafcaflı MasaAsistani Yüklendi");
+
   const { masaId } = useParams();
   const [mesaj, setMesaj] = useState("");
   const [yanit, setYanit] = useState("");
@@ -30,7 +32,9 @@ function MasaAsistani() {
           <h1 className="text-4xl font-extrabold drop-shadow-lg animate-pulse">
             🎙️ Neso Asistan
           </h1>
-          <p className="text-sm mt-1 opacity-80">Masa No: <span className="font-bold">{masaId}</span></p>
+          <p className="text-sm mt-1 opacity-80">
+            Masa No: <span className="font-bold">{masaId}</span>
+          </p>
         </div>
 
         <div className="mb-4">
@@ -55,7 +59,9 @@ function MasaAsistani() {
 
         {mesaj && (
           <div className="mt-6 text-sm">
-            <p className="mb-1 text-white/70">🎤 <span className="font-semibold">Algılanan:</span> {mesaj}</p>
+            <p className="mb-1 text-white/70">
+              🎤 <span className="font-semibold">Algılanan:</span> {mesaj}
+            </p>
             <p className="mt-2 text-white/90 text-lg">
               🤖 <span className="font-semibold">Neso'nun Yanıtı:</span>{" "}
               <span className="animate-fadeIn">{yanit}</span>

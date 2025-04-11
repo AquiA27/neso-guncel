@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from "react";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 function AdminPaneli() {
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/siparisler")
+    fetch(`${API_BASE}/siparisler`)
       .then((res) => res.json())
       .then((data) => setOrders(data.orders.reverse()))
       .catch((err) => console.error("Veriler alınamadı", err));
   }, []);
 
-  const filtrelenmis = orders.filter((o) =>
-    o.masa.includes(arama) || o.istek.toLowerCase().includes(arama.toLowerCase())
-  );
+  const filtrelenmis = orders
+    .filter((o) =>
+      o.masa.includes(arama) || o.istek.toLowerCase().includes(arama.toLowerCase())
+    );
 
   return (
     <div style={{ textAlign: "center", padding: 50, fontFamily: "Arial" }}>
