@@ -2,65 +2,38 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 
-const synth = window.speechSynthesis;
-const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
 function MasaAsistani() {
   const { masaId } = useParams();
   const [mesaj, setMesaj] = useState("");
   const [yanit, setYanit] = useState("");
   const [loading, setLoading] = useState(false);
-  const [micActive, setMicActive] = useState(false);
-
-  useEffect(() => {
-    console.log("🎙️ Sesli MasaAsistani aktif");
-  }, []);
 
   const gonder = async () => {
     if (!mesaj) return;
     setLoading(true);
     try {
-      const res = await axios.post(`${process.env.REACT_APP_API_BASE}/neso`, {
-        text: mesaj,
-        masa: masaId,
-      });
-      const reply = res.data.reply;
-      setYanit(reply);
-      sesliYanıtVer(reply);
+      const res = await axios.post(
+        "https://neso-backend-clean.onrender.com/neso",
+        {
+          text: mesaj,
+          masa: masaId,
+        }
+      );
+      setYanit(res.data.reply);
+
+      // Titreşim desteği (mobil cihazlar için)
+      if ("vibrate" in navigator) {
+        navigator.vibrate(200);
+      }
+
+      // Sesli yanıt
+      const utterance = new SpeechSynthesisUtterance(res.data.reply);
+      utterance.lang = "tr-TR";
+      speechSynthesis.speak(utterance);
     } catch (err) {
       setYanit("🛑 Sunucuya ulaşılamadı.");
     }
     setLoading(false);
-  };
-
-  const sesliYanıtVer = (text) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "tr-TR";
-    synth.speak(utterance);
-  };
-
-  const sesiDinle = () => {
-    if (!recognition) {
-      alert("Tarayıcınız ses tanımayı desteklemiyor.");
-      return;
-    }
-
-    const recog = new recognition();
-    recog.lang = "tr-TR";
-    recog.start();
-    setMicActive(true);
-
-    recog.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setMesaj(transcript);
-      setMicActive(false);
-      setTimeout(gonder, 500);
-    };
-
-    recog.onerror = (e) => {
-      console.error("🎤 Mikrofon hatası:", e.error);
-      setMicActive(false);
-    };
   };
 
   return (
@@ -76,46 +49,41 @@ function MasaAsistani() {
         </div>
 
         <div className="mb-4">
-          <label className="block text-lg font-semibold mb-1">🗣️ Mesajınız</label>
+          <label className="block text-lg font-semibold mb-1">
+            🗣️ Mesajınız
+          </label>
           <input
             type="text"
             value={mesaj}
             onChange={(e) => setMesaj(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && gonder()}
-            placeholder="Konuş ya da yazın..."
-            className="w-full p-3 rounded-xl bg-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white focus:bg-white/30"
+            placeholder="Örn: 1 çay 1 latte veya ne içmeliyim?"
+            className="w-full p-5 text-lg rounded-xl bg-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white focus:bg-white/30"
           />
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={gonder}
-            disabled={loading}
-            className="flex-1 bg-white/20 hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out"
-          >
-            {loading ? "⏳ Bekleniyor..." : "🚀 Gönder"}
-          </button>
+        <button
+          onClick={gonder}
+          disabled={loading}
+          className="w-full mt-2 bg-white/20 hover:bg-white/40 text-white font-bold py-4 px-6 text-lg rounded-xl transition duration-300 ease-in-out"
+        >
+          {loading ? "🎧 Neso düşünüyor..." : "🚀 Gönder"}
+        </button>
 
-          <button
-            onClick={sesiDinle}
-            className={`flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
-          >
-            🎤 Dinle
-          </button>
-        </div>
-
-        {yanit && (
+        {mesaj && (
           <div className="mt-6 text-sm">
-            <p className="text-white/70 mb-1">📨 <span className="font-semibold">Mesajınız:</span> {mesaj}</p>
+            <p className="mb-1 text-white/70">
+              🎤 <span className="font-semibold">Algılanan:</span> {mesaj}
+            </p>
             <p className="mt-2 text-white/90 text-lg">
-              🤖 <span className="font-semibold">Neso:</span>{" "}
+              🤖 <span className="font-semibold">Neso'nun Yanıtı:</span>{" "}
               <span className="animate-fadeIn">{yanit}</span>
             </p>
           </div>
         )}
 
         <div className="mt-8 text-center text-xs text-white/60">
-          ☕ Neso Asistan © {new Date().getFullYear()} | Sesli destek aktif
+          ☕ Neso Asistan © {new Date().getFullYear()} | Hayatın tadı burada çıkar
         </div>
       </div>
     </div>
