@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
 import MutfakEkrani from "./MutfakEkrani";
 import AdminPaneli from "./AdminPaneli";
@@ -15,6 +15,7 @@ function App() {
         </header>
 
         <Routes>
+          <Route path="/" element={<Navigate to="/masa/1" replace />} />
           <Route path="/masa/:masaId" element={<MasaAsistani />} />
           <Route path="/mutfak" element={<MutfakEkrani />} />
           <Route path="/admin" element={<AdminPaneli />} />
