@@ -8,32 +8,35 @@ import "./index.css";
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100 text-gray-800 font-sans">
-        <header className="text-center py-6 bg-white shadow-md mb-6">
-          <h1 className="text-4xl font-bold text-blue-600">🍽️ Neso Asistan</h1>
-          <p className="text-sm text-gray-500">Tailwind entegresi tamamlandı</p>
-        </header>
+      <Routes>
+        {/* Ana sayfa doğrudan masa 1'e yönlendirir */}
+        <Route path="/" element={<Navigate to="/masa/1" replace />} />
 
-        <Routes>
-          <Route path="/" element={<Navigate to="/masa/1" replace />} />
-          <Route path="/masa/:masaId" element={<MasaAsistani />} />
-          <Route path="/mutfak" element={<MutfakEkrani />} />
-          <Route path="/admin" element={<AdminPaneli />} />
-          <Route
-            path="*"
-            element={
-              <div className="text-center p-10">
-                <h2 className="text-2xl text-red-500 font-semibold">
-                  Sayfa Bulunamadı
-                </h2>
-                <p className="text-gray-500 mt-2">
-                  Lütfen geçerli bir bağlantı veya QR kod kullanın.
+        {/* Kullanıcı masa ekranı */}
+        <Route path="/masa/:masaId" element={<MasaAsistani />} />
+
+        {/* Mutfak ekranı */}
+        <Route path="/mutfak" element={<MutfakEkrani />} />
+
+        {/* Admin ekranı */}
+        <Route path="/admin" element={<AdminPaneli />} />
+
+        {/* 404 sayfa bulunamadı */}
+        <Route
+          path="*"
+          element={
+            <div className="min-h-screen bg-gradient-to-br from-red-500 via-pink-500 to-yellow-500 flex items-center justify-center px-4">
+              <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-10 rounded-2xl text-center text-white shadow-2xl max-w-md">
+                <h2 className="text-4xl font-bold animate-bounce mb-4">🚫 404</h2>
+                <h3 className="text-xl font-semibold mb-2">Sayfa Bulunamadı</h3>
+                <p className="opacity-80">
+                  Geçersiz bir bağlantı ya da QR kod kullanılmış olabilir.
                 </p>
               </div>
-            }
-          />
-        </Routes>
-      </div>
+            </div>
+          }
+        />
+      </Routes>
     </Router>
   );
 }
