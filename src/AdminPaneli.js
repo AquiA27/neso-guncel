@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 
-// Create React App uyumlu ortam değişkeni
+// Ortam değişkeninden API adresini al
 const API_BASE = process.env.REACT_APP_API_BASE;
+
+// Basic Auth (Temel Kimlik Doğrulama) için kullanıcı adı ve şifre
+const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function AdminPaneli() {
   const [orders, setOrders] = useState([]);
@@ -9,10 +12,17 @@ function AdminPaneli() {
 
   useEffect(() => {
     console.log("🌍 API BASE:", API_BASE);
-    fetch(`${API_BASE}/siparisler`)
-      .then((res) => res.json())
+    fetch(`${API_BASE}/siparisler`, {
+      headers: {
+        Authorization: AUTH_HEADER,
+      },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Yetkisiz veya sunucu hatası.");
+        return res.json();
+      })
       .then((data) => setOrders(data.orders.reverse()))
-      .catch((err) => console.error("Veriler alınamadı", err));
+      .catch((err) => console.error("Veriler alınamadı:", err));
   }, []);
 
   const filtrelenmis = orders.filter((o) =>

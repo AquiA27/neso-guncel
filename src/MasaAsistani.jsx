@@ -24,9 +24,12 @@ function MasaAsistani() {
         text: mesaj,
         masa: masaId,
       });
+
       const reply = res.data.reply;
+      const voiceReply = res.data.voice_reply || reply;
+
       setYanit(reply);
-      sesliYanıtVer(reply);
+      sesliYanıtVer(voiceReply); // 🔊 Emoji'siz versiyonu okut
     } catch (err) {
       setYanit("🛑 Sunucuya ulaşılamadı.");
     }
