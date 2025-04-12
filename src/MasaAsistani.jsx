@@ -24,12 +24,9 @@ function MasaAsistani() {
         text: mesaj,
         masa: masaId,
       });
-
       const reply = res.data.reply;
-      const voiceReply = res.data.voice_reply || reply;
-
       setYanit(reply);
-      sesliYanıtVer(voiceReply); // 🔊 Emoji'siz versiyonu okut
+      sesliYanıtVer(reply);
     } catch (err) {
       setYanit("🛑 Sunucuya ulaşılamadı.");
     }
@@ -39,6 +36,26 @@ function MasaAsistani() {
   const sesliYanıtVer = (text) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "tr-TR";
+    utterance.pitch = 1.3;
+    utterance.rate = 0.95;
+
+    const voices = synth.getVoices();
+    const turkceSes = voices.find(
+      (v) => v.lang === "tr-TR" && v.name.toLowerCase().includes("google")
+    );
+    if (turkceSes) utterance.voice = turkceSes;
+
+    if (!turkceSes) {
+      synth.onvoiceschanged = () => {
+        const updatedVoices = synth.getVoices();
+        const fallback = updatedVoices.find((v) => v.lang === "tr-TR");
+        if (fallback) {
+          utterance.voice = fallback;
+          synth.speak(utterance);
+        }
+      };
+    }
+
     synth.speak(utterance);
   };
 
@@ -101,7 +118,9 @@ function MasaAsistani() {
 
           <button
             onClick={sesiDinle}
-            className={`flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
+            className={`flex-1 ${
+              micActive ? "bg-red-500" : "bg-white/20"
+            } hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
           >
             🎤 Dinle
           </button>
