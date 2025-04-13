@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
+const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function AdminPaneli() {
   const [orders, setOrders] = useState([]);
@@ -14,14 +15,14 @@ function AdminPaneli() {
       setIsLoggedIn(true);
       verileriGetir();
     } else {
-      alert("Hatalı kullanıcı adı veya şifre");
+      alert("🔒 Hatalı kullanıcı adı veya şifre");
     }
   };
 
   const verileriGetir = () => {
     fetch(`${API_BASE}/siparisler`, {
       headers: {
-        Authorization: "Basic " + btoa("admin:admin123"),
+        Authorization: AUTH_HEADER,
       },
     })
       .then((res) => {
@@ -39,25 +40,27 @@ function AdminPaneli() {
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white shadow-xl p-8 rounded-lg w-full max-w-sm">
-          <h2 className="text-2xl font-bold mb-4 text-center text-gray-800">🔐 Admin Girişi</h2>
+        <div className="bg-white shadow-lg p-8 rounded-lg w-full max-w-sm border border-gray-200">
+          <h2 className="text-2xl font-bold mb-6 text-center text-gray-800 flex items-center justify-center gap-2">
+            <span role="img" aria-label="lock">🔐</span> Admin Girişi
+          </h2>
           <input
             type="text"
             placeholder="Kullanıcı Adı"
             value={kullaniciAdi}
             onChange={(e) => setKullaniciAdi(e.target.value)}
-            className="w-full p-2 border mb-4 rounded"
+            className="w-full p-3 border mb-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <input
             type="password"
             placeholder="Şifre"
             value={sifre}
             onChange={(e) => setSifre(e.target.value)}
-            className="w-full p-2 border mb-4 rounded"
+            className="w-full p-3 border mb-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             onClick={girisYap}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition"
           >
             Giriş Yap
           </button>
@@ -68,30 +71,33 @@ function AdminPaneli() {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen text-gray-800 font-sans">
-      <h1 className="text-3xl font-bold mb-4 text-center">🛠️ Admin Paneli</h1>
+      <h1 className="text-3xl font-bold mb-6 text-center flex items-center justify-center gap-2">
+        🛠️ Admin Paneli
+      </h1>
       <input
         type="text"
-        placeholder="Masa no veya istek ara..."
+        placeholder="🔍 Masa no veya istek ara..."
         value={arama}
         onChange={(e) => setArama(e.target.value)}
-        className="block mx-auto w-full max-w-md p-2 mb-6 border rounded"
+        className="block mx-auto w-full max-w-md p-3 mb-6 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
       />
-      {filtrelenmis.length === 0 && (
-        <p className="text-center text-gray-500">Gösterilecek sipariş yok.</p>
+      {filtrelenmis.length === 0 ? (
+        <p className="text-center text-gray-500">📭 Gösterilecek sipariş yok.</p>
+      ) : (
+        <div className="space-y-5">
+          {filtrelenmis.map((o, i) => (
+            <div
+              key={i}
+              className="max-w-2xl mx-auto bg-white p-5 rounded-lg shadow border border-gray-200"
+            >
+              <p><strong>🪑 Masa:</strong> {o.masa}</p>
+              <p><strong>🗣️ İstek:</strong> {o.istek}</p>
+              <p><strong>🤖 Neso:</strong> {o.yanit}</p>
+              <p className="text-sm text-gray-500 mt-2">⏰ {o.zaman}</p>
+            </div>
+          ))}
+        </div>
       )}
-      <div className="space-y-4">
-        {filtrelenmis.map((o, i) => (
-          <div
-            key={i}
-            className="max-w-2xl mx-auto bg-white p-4 rounded shadow border"
-          >
-            <p><strong>🪑 Masa:</strong> {o.masa}</p>
-            <p><strong>🗣️ İstek:</strong> {o.istek}</p>
-            <p><strong>🤖 Neso:</strong> {o.yanit}</p>
-            <p className="text-sm text-gray-500">⏰ {o.zaman}</p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
