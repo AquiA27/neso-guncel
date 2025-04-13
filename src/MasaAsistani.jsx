@@ -14,6 +14,12 @@ function MasaAsistani() {
 
   useEffect(() => {
     console.log("🎙️ Sesli MasaAsistani aktif");
+
+    if (synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = () => {
+        synth.getVoices(); // Sesleri yükle
+      };
+    }
   }, []);
 
   const gonder = async () => {
@@ -34,19 +40,22 @@ function MasaAsistani() {
   };
 
   const sesliYanıtVer = (text) => {
-    const temizYanit = text.replace(/[\u{1F300}-\u{1F6FF}|\u{1F900}-\u{1F9FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, "");
-    const utterance = new SpeechSynthesisUtterance(temizYanit);
+    const temizlenmis = text.replace(/☕️|🍵|🥤/g, ""); // Emojileri sil
+    const utterance = new SpeechSynthesisUtterance(temizlenmis);
     utterance.lang = "tr-TR";
     utterance.pitch = 1.3;
     utterance.rate = 0.95;
 
     const voices = synth.getVoices();
-    const turkceKadin = voices.find(
-      (v) => v.lang === "tr-TR" && v.name.toLowerCase().includes("google") && v.name.toLowerCase().includes("female")
+    const femaleVoice = voices.find(
+      (v) =>
+        v.lang === "tr-TR" &&
+        v.name.toLowerCase().includes("google") &&
+        v.name.toLowerCase().includes("female")
     );
 
-    if (turkceKadin) {
-      utterance.voice = turkceKadin;
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
       synth.speak(utterance);
     } else {
       synth.onvoiceschanged = () => {
@@ -61,7 +70,7 @@ function MasaAsistani() {
 
   const sesiDinle = () => {
     if (!recognition) {
-      alert("Tarayıcınız ses tanımayı desteklemiyor.");
+      alert("Tarayıcınız ses tanımıyor olabilir.");
       return;
     }
 
@@ -74,7 +83,7 @@ function MasaAsistani() {
       const transcript = event.results[0][0].transcript;
       setMesaj(transcript);
       setMicActive(false);
-      setTimeout(gonder, 500);
+      setTimeout(gonder, 300);
     };
 
     recog.onerror = (e) => {
@@ -118,7 +127,9 @@ function MasaAsistani() {
 
           <button
             onClick={sesiDinle}
-            className={`flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
+            className={`flex-1 ${
+              micActive ? "bg-red-500" : "bg-white/20"
+            } hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
           >
             🎤 Dinle
           </button>
@@ -126,7 +137,9 @@ function MasaAsistani() {
 
         {yanit && (
           <div className="mt-6 text-sm">
-            <p className="text-white/70 mb-1">📨 <span className="font-semibold">Mesajınız:</span> {mesaj}</p>
+            <p className="text-white/70 mb-1">
+              📨 <span className="font-semibold">Mesajınız:</span> {mesaj}
+            </p>
             <p className="mt-2 text-white/90 text-lg">
               🤖 <span className="font-semibold">Neso:</span>{" "}
               <span className="animate-fadeIn">{yanit}</span>
