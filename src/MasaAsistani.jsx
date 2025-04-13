@@ -11,15 +11,26 @@ function MasaAsistani() {
   const [yanit, setYanit] = useState("");
   const [loading, setLoading] = useState(false);
   const [micActive, setMicActive] = useState(false);
+  const [voicesReady, setVoicesReady] = useState(false);
 
   useEffect(() => {
     console.log("🎙️ Sesli MasaAsistani aktif");
 
-    if (synth.onvoiceschanged !== undefined) {
-      synth.onvoiceschanged = () => {
-        synth.getVoices(); // Sesleri yükle
-      };
+    // Sesler yüklendiğinde state'i güncelle
+    const handleVoicesChanged = () => {
+      setVoicesReady(true);
+    };
+
+    synth.onvoiceschanged = handleVoicesChanged;
+
+    // İlk yüklemede de deneyelim
+    if (synth.getVoices().length > 0) {
+      setVoicesReady(true);
     }
+
+    return () => {
+      synth.onvoiceschanged = null;
+    };
   }, []);
 
   const gonder = async () => {
@@ -40,37 +51,36 @@ function MasaAsistani() {
   };
 
   const sesliYanıtVer = (text) => {
-    const temizlenmis = text.replace(/☕️|🍵|🥤/g, ""); // Emojileri sil
-    const utterance = new SpeechSynthesisUtterance(temizlenmis);
+    if (!voicesReady) return;
+
+    const temizMetin = text.replace(/[^\w\sğüşıöçĞÜŞİÖÇ.,!?]/g, ""); // Emojileri çıkar
+    const utterance = new SpeechSynthesisUtterance(temizMetin);
     utterance.lang = "tr-TR";
-    utterance.pitch = 1.3;
+    utterance.pitch = 1.2;
     utterance.rate = 0.95;
 
     const voices = synth.getVoices();
-    const femaleVoice = voices.find(
+    const kadinSes = voices.find(
       (v) =>
         v.lang === "tr-TR" &&
-        v.name.toLowerCase().includes("google") &&
-        v.name.toLowerCase().includes("female")
+        v.name.toLowerCase().includes("female") &&
+        v.name.toLowerCase().includes("google")
     );
 
-    if (femaleVoice) {
-      utterance.voice = femaleVoice;
-      synth.speak(utterance);
+    if (kadinSes) {
+      utterance.voice = kadinSes;
     } else {
-      synth.onvoiceschanged = () => {
-        const updated = synth.getVoices().find((v) => v.lang === "tr-TR");
-        if (updated) {
-          utterance.voice = updated;
-          synth.speak(utterance);
-        }
-      };
+      const fallback = voices.find((v) => v.lang === "tr-TR");
+      if (fallback) utterance.voice = fallback;
     }
+
+    synth.cancel(); // Önceki sesleri iptal et
+    synth.speak(utterance);
   };
 
   const sesiDinle = () => {
     if (!recognition) {
-      alert("Tarayıcınız ses tanımıyor olabilir.");
+      alert("Tarayıcınız ses tanımayı desteklemiyor.");
       return;
     }
 
@@ -83,7 +93,7 @@ function MasaAsistani() {
       const transcript = event.results[0][0].transcript;
       setMesaj(transcript);
       setMicActive(false);
-      setTimeout(gonder, 300);
+      setTimeout(gonder, 500);
     };
 
     recog.onerror = (e) => {
@@ -127,9 +137,7 @@ function MasaAsistani() {
 
           <button
             onClick={sesiDinle}
-            className={`flex-1 ${
-              micActive ? "bg-red-500" : "bg-white/20"
-            } hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
+            className={`flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
           >
             🎤 Dinle
           </button>
