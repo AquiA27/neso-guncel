@@ -51,32 +51,43 @@ function MasaAsistani() {
   };
 
   const sesliYanıtVer = (text) => {
-    if (!voicesReady) return;
-
-    const temizMetin = text.replace(/[^\w\sğüşıöçĞÜŞİÖÇ.,!?]/g, ""); // Emojileri çıkar
+    const temizMetin = text.replace(/[^\w\sğüşıöçĞÜŞİÖÇ.,!?]/g, "");
     const utterance = new SpeechSynthesisUtterance(temizMetin);
     utterance.lang = "tr-TR";
-    utterance.pitch = 1.2;
+    utterance.pitch = 1.3;
     utterance.rate = 0.95;
-
-    const voices = synth.getVoices();
-    const kadinSes = voices.find(
-      (v) =>
-        v.lang === "tr-TR" &&
-        v.name.toLowerCase().includes("female") &&
-        v.name.toLowerCase().includes("google")
-    );
-
-    if (kadinSes) {
-      utterance.voice = kadinSes;
-    } else {
+  
+    const setVoiceAndSpeak = () => {
+      const voices = synth.getVoices();
+      const kadinSes = voices.find(
+        (v) =>
+          v.lang === "tr-TR" &&
+          v.name.toLowerCase().includes("female") &&
+          v.name.toLowerCase().includes("google")
+      );
+  
       const fallback = voices.find((v) => v.lang === "tr-TR");
-      if (fallback) utterance.voice = fallback;
+  
+      if (kadinSes) {
+        utterance.voice = kadinSes;
+      } else if (fallback) {
+        utterance.voice = fallback;
+      }
+  
+      synth.cancel();
+      synth.speak(utterance);
+    };
+  
+    // Ses listesi henüz yüklenmediyse beklet
+    if (synth.getVoices().length === 0) {
+      synth.onvoiceschanged = () => {
+        setVoiceAndSpeak();
+      };
+    } else {
+      setVoiceAndSpeak();
     }
-
-    synth.cancel(); // Önceki sesleri iptal et
-    synth.speak(utterance);
   };
+  
 
   const sesiDinle = () => {
     if (!recognition) {
