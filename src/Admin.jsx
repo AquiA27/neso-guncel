@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import AdminMenu from "./AdminMenu";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
@@ -98,6 +99,9 @@ function AdminPaneli() {
           ))}
         </div>
       )}
+
+      {/* Menü Yönetimi */}
+      <AdminMenu />
     </div>
   );
 }

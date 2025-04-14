@@ -16,14 +16,12 @@ function MasaAsistani() {
   useEffect(() => {
     console.log("🎙️ Sesli MasaAsistani aktif");
 
-    // Sesler yüklendiğinde state'i güncelle
     const handleVoicesChanged = () => {
       setVoicesReady(true);
     };
 
     synth.onvoiceschanged = handleVoicesChanged;
 
-    // İlk yüklemede de deneyelim
     if (synth.getVoices().length > 0) {
       setVoicesReady(true);
     }
@@ -50,44 +48,26 @@ function MasaAsistani() {
     setLoading(false);
   };
 
-  const sesliYanıtVer = (text) => {
-    const temizMetin = text.replace(/[^\w\sğüşıöçĞÜŞİÖÇ.,!?]/g, "");
-    const utterance = new SpeechSynthesisUtterance(temizMetin);
-    utterance.lang = "tr-TR";
-    utterance.pitch = 1.3;
-    utterance.rate = 0.95;
-  
-    const setVoiceAndSpeak = () => {
-      const voices = synth.getVoices();
-      const kadinSes = voices.find(
-        (v) =>
-          v.lang === "tr-TR" &&
-          v.name.toLowerCase().includes("female") &&
-          v.name.toLowerCase().includes("google")
-      );
-  
-      const fallback = voices.find((v) => v.lang === "tr-TR");
-  
-      if (kadinSes) {
-        utterance.voice = kadinSes;
-      } else if (fallback) {
-        utterance.voice = fallback;
-      }
-  
-      synth.cancel();
-      synth.speak(utterance);
-    };
-  
-    // Ses listesi henüz yüklenmediyse beklet
-    if (synth.getVoices().length === 0) {
-      synth.onvoiceschanged = () => {
-        setVoiceAndSpeak();
-      };
-    } else {
-      setVoiceAndSpeak();
+  const oynatGoogleTTS = async (text) => {
+    try {
+      const res = await axios.post("/tts", {
+        text: text,
+        lang: "tr-TR",
+        voice: "tr-TR-Wavenet-D",
+      }, { responseType: "arraybuffer" });
+
+      const blob = new Blob([res.data], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+    } catch (err) {
+      console.error("TTS oynatma hatası:", err);
     }
   };
-  
+
+  const sesliYanıtVer = (text) => {
+    oynatGoogleTTS(text);
+  };
 
   const sesiDinle = () => {
     if (!recognition) {
