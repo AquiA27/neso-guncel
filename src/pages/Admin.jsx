@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import AdminMenu from "./AdminMenu";
+import { LogIn, LogOut } from "lucide-react";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
@@ -7,17 +7,24 @@ const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 function AdminPaneli() {
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("adminGiris") === "true");
   const [kullaniciAdi, setKullaniciAdi] = useState("");
   const [sifre, setSifre] = useState("");
 
   const girisYap = () => {
     if (kullaniciAdi === "admin" && sifre === "admin123") {
       setIsLoggedIn(true);
+      localStorage.setItem("adminGiris", "true");
       verileriGetir();
     } else {
       alert("🔒 Hatalı kullanıcı adı veya şifre");
     }
+  };
+
+  const cikisYap = () => {
+    localStorage.removeItem("adminGiris");
+    setIsLoggedIn(false);
+    setOrders([]);
   };
 
   const verileriGetir = () => {
@@ -34,13 +41,21 @@ function AdminPaneli() {
       .catch((err) => console.error("Veriler alınamadı:", err));
   };
 
+  useEffect(() => {
+    if (isLoggedIn) {
+      verileriGetir();
+      const interval = setInterval(verileriGetir, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [isLoggedIn]);
+
   const filtrelenmis = orders.filter((o) =>
     o.masa.includes(arama) || o.istek.toLowerCase().includes(arama.toLowerCase())
   );
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-200">
         <div className="bg-white shadow-lg p-8 rounded-lg w-full max-w-sm border border-gray-200">
           <h2 className="text-2xl font-bold mb-6 text-center text-gray-800 flex items-center justify-center gap-2">
             <span role="img" aria-label="lock">🔐</span> Admin Girişi
@@ -61,9 +76,9 @@ function AdminPaneli() {
           />
           <button
             onClick={girisYap}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition flex items-center justify-center gap-2"
           >
-            Giriş Yap
+            <LogIn size={18} /> Giriş Yap
           </button>
         </div>
       </div>
@@ -71,10 +86,17 @@ function AdminPaneli() {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen text-gray-800 font-sans">
-      <h1 className="text-3xl font-bold mb-6 text-center flex items-center justify-center gap-2">
-        🛠️ Admin Paneli
-      </h1>
+    <div className="p-8 min-h-screen bg-gradient-to-tr from-gray-100 via-blue-100 to-purple-100 text-gray-800 font-sans">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold flex items-center gap-2">🛠️ Admin Paneli</h1>
+        <button
+          onClick={cikisYap}
+          className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded flex items-center gap-2"
+        >
+          <LogOut size={18} /> Çıkış Yap
+        </button>
+      </div>
+
       <input
         type="text"
         placeholder="🔍 Masa no veya istek ara..."
@@ -82,6 +104,7 @@ function AdminPaneli() {
         onChange={(e) => setArama(e.target.value)}
         className="block mx-auto w-full max-w-md p-3 mb-6 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
       />
+
       {filtrelenmis.length === 0 ? (
         <p className="text-center text-gray-500">📭 Gösterilecek sipariş yok.</p>
       ) : (
@@ -99,9 +122,6 @@ function AdminPaneli() {
           ))}
         </div>
       )}
-
-      {/* Menü Yönetimi */}
-      <AdminMenu />
     </div>
   );
 }
