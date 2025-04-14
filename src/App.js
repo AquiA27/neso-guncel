@@ -2,7 +2,6 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
 import MutfakEkrani from "./MutfakEkrani";
-import AdminPaneli from "./Admin";
 import "./index.css";
 
 function App() {
