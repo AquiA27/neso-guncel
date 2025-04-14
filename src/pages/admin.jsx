@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut, Settings2, Save } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
@@ -10,6 +11,11 @@ function AdminPaneli() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("adminGiris") === "true");
   const [kullaniciAdi, setKullaniciAdi] = useState("");
   const [sifre, setSifre] = useState("");
+  const [ayarlarAcik, setAyarlarAcik] = useState(false);
+  const [emojiKullan, setEmojiKullan] = useState(true);
+  const [model, setModel] = useState("gpt-3.5-turbo");
+  const [hiz, setHiz] = useState(1.2);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const girisYap = () => {
     if (kullaniciAdi === "admin" && sifre === "admin123") {
@@ -39,6 +45,22 @@ function AdminPaneli() {
       })
       .then((data) => setOrders(data.orders.reverse()))
       .catch((err) => console.error("Veriler alınamadı:", err));
+  };
+
+  const ayarlariKaydet = () => {
+    setKaydediliyor(true);
+    fetch(`${API_BASE}/ayarlar`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: AUTH_HEADER,
+      },
+      body: JSON.stringify({ model, hiz, emojiKullan })
+    })
+      .then((res) => res.json())
+      .then(() => alert("✅ Ayarlar kaydedildi."))
+      .catch((err) => alert("Hata oluştu: " + err.message))
+      .finally(() => setKaydediliyor(false));
   };
 
   useEffect(() => {
@@ -89,13 +111,75 @@ function AdminPaneli() {
     <div className="p-8 min-h-screen bg-gradient-to-tr from-gray-100 via-blue-100 to-purple-100 text-gray-800 font-sans">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">🛠️ Admin Paneli</h1>
-        <button
-          onClick={cikisYap}
-          className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded flex items-center gap-2"
-        >
-          <LogOut size={18} /> Çıkış Yap
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setAyarlarAcik(!ayarlarAcik)}
+            className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-3 rounded flex items-center gap-1"
+          >
+            <Settings2 size={18} /> Ayarlar
+          </button>
+          <Link
+            to="/mutfak"
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+          >
+            👨‍🍳 Mutfak Ekranı
+          </Link>
+          <button
+            onClick={cikisYap}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded flex items-center gap-2"
+          >
+            <LogOut size={18} /> Çıkış Yap
+          </button>
+        </div>
       </div>
+
+      {ayarlarAcik && (
+        <div className="bg-white p-5 rounded-lg shadow mb-6 border max-w-2xl mx-auto">
+          <h3 className="text-xl font-semibold mb-3">🔧 Asistan Ayarları</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label>Ses Hızı:</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.5"
+                max="2.0"
+                value={hiz}
+                onChange={(e) => setHiz(parseFloat(e.target.value))}
+                className="border p-1 rounded w-24 text-right"
+              />
+            </div>
+            <div className="flex justify-between items-center">
+              <label>Model:</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="border p-1 rounded"
+              >
+                <option value="gpt-3.5-turbo">GPT 3.5</option>
+                <option value="gpt-4">GPT 4</option>
+              </select>
+            </div>
+            <div className="flex justify-between items-center">
+              <label>Emoji Kullan:</label>
+              <input
+                type="checkbox"
+                checked={emojiKullan}
+                onChange={(e) => setEmojiKullan(e.target.checked)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={ayarlariKaydet}
+                disabled={kaydediliyor}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded flex items-center gap-2"
+              >
+                <Save size={16} /> {kaydediliyor ? "Kaydediliyor..." : "Kaydet"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <input
         type="text"
