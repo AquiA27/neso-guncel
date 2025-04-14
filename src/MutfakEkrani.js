@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 
+const API_BASE = process.env.REACT_APP_API_BASE;
+
 function MutfakEkrani() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     const fetchOrders = () => {
-      fetch("http://localhost:8000/siparisler")
+      fetch(`${API_BASE}/siparisler`)
         .then((res) => res.json())
         .then((data) => setOrders(data.orders.reverse()))
         .catch((err) => console.error("Siparişler alınamadı", err));
