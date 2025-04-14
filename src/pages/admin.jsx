@@ -112,11 +112,15 @@ function AdminPaneli() {
           {filtrelenmis.map((o, i) => (
             <div
               key={i}
-              className="max-w-2xl mx-auto bg-white p-5 rounded-lg shadow border border-gray-200"
+              className="max-w-2xl mx-auto bg-gradient-to-bl from-white to-blue-50 p-5 rounded-lg shadow border border-gray-200"
             >
-              <p><strong>🪑 Masa:</strong> {o.masa}</p>
-              <p><strong>🗣️ İstek:</strong> {o.istek}</p>
-              <p><strong>🤖 Neso:</strong> {o.yanit}</p>
+              <p className="mb-1"><strong>🪑 Masa:</strong> {o.masa}</p>
+              <div className="bg-gray-100 rounded p-3 mb-2">
+                <p><strong>🗣️ İstek:</strong> {o.istek}</p>
+              </div>
+              <div className="bg-blue-100 rounded p-3">
+                <p><strong>🤖 Neso:</strong> {o.yanit}</p>
+              </div>
               <p className="text-sm text-gray-500 mt-2">⏰ {o.zaman}</p>
             </div>
           ))}
