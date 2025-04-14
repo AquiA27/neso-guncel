@@ -13,35 +13,36 @@ function MutfakEkrani() {
         .catch((err) => console.error("Siparişler alınamadı", err));
     };
 
-    fetchOrders(); // İlk açıldığında getir
-    const interval = setInterval(fetchOrders, 5000); // Her 5 saniyede bir yenile
-    return () => clearInterval(interval); // Sayfa kapanırsa interval iptal
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div style={{ textAlign: "center", padding: 50, fontFamily: "Arial" }}>
-      <h1>👨‍🍳 Mutfak Sipariş Paneli</h1>
-      {orders.length === 0 && <p>Henüz sipariş yok.</p>}
-      {orders.map((o, i) => (
-        <div
-          key={i}
-          style={{
-            margin: "20px auto",
-            maxWidth: 400,
-            border: "2px solid #444",
-            borderRadius: 10,
-            padding: 15,
-            textAlign: "left",
-            backgroundColor: "#f9f9f9",
-            boxShadow: "2px 2px 10px rgba(0,0,0,0.1)",
-          }}
-        >
-          <p><strong>🪑 Masa:</strong> {o.masa}</p>
-          <p><strong>🗣️ İstek:</strong> {o.istek}</p>
-          <p><strong>🤖 Yanıt:</strong> {o.yanit}</p>
-          <p><small>⏰ {o.zaman}</small></p>
+    <div className="min-h-screen bg-gradient-to-br from-yellow-100 to-orange-200 p-6 text-gray-800 font-sans">
+      <h1 className="text-4xl font-bold text-center mb-8">👨‍🍳 Mutfak Sipariş Paneli</h1>
+
+      {orders.length === 0 ? (
+        <p className="text-center text-gray-500">Henüz sipariş yok.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {orders.map((o, i) => (
+            <div
+              key={i}
+              className="bg-white border border-gray-200 rounded-xl shadow-md p-5 hover:shadow-lg transition-all"
+            >
+              <p className="font-semibold text-lg mb-2">🪑 Masa: {o.masa}</p>
+              <div className="bg-gray-100 rounded p-3 mb-3">
+                <p><strong>🗣️ İstek:</strong> {o.istek}</p>
+              </div>
+              <div className="bg-blue-100 rounded p-3">
+                <p><strong>🤖 Yanıt:</strong> {o.yanit}</p>
+              </div>
+              <p className="text-sm text-right text-gray-500 mt-2">⏰ {o.zaman}</p>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
