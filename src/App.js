@@ -44,5 +44,6 @@ function App() {
     </Router>
   );
 }
+// Deploy tetikleme için eklendi
 
 export default App;
