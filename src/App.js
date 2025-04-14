@@ -2,6 +2,8 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
 import MutfakEkrani from "./MutfakEkrani";
+import Menu from "./pages/menu";
+import AdminPaneli from "./pages/admin";
 import "./index.css";
 
 function App() {
@@ -19,6 +21,9 @@ function App() {
 
         {/* Admin ekranı */}
         <Route path="/admin" element={<AdminPaneli />} />
+
+        {/* Menü ekranı */}
+        <Route path="/menu" element={<Menu />} />
 
         {/* 404 sayfa bulunamadı */}
         <Route
