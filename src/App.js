@@ -1,29 +1,31 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
 import MutfakEkrani from "./MutfakEkrani";
 import Menu from "./pages/menu";
 import AdminPaneli from "./pages/admin";
+import MenuGoruntule from "./MenuGoruntule";
+import Home from "./Home";
 import "./index.css";
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Ana sayfa doğrudan masa 1'e yönlendirir */}
-        <Route path="/" element={<Navigate to="/masa/1" replace />} />
+        {/* Ana sayfa: kullanıcıya seçenek sunar */}
+        <Route path="/" element={<Home />} />
 
-        {/* Kullanıcı masa ekranı */}
+        {/* Masa ekranı */}
         <Route path="/masa/:masaId" element={<MasaAsistani />} />
+
+        {/* Menü ekranı (görüntüleme) */}
+        <Route path="/menu" element={<MenuGoruntule />} />
 
         {/* Mutfak ekranı */}
         <Route path="/mutfak" element={<MutfakEkrani />} />
 
         {/* Admin ekranı */}
         <Route path="/admin" element={<AdminPaneli />} />
-
-        {/* Menü ekranı */}
-        <Route path="/menu" element={<Menu />} />
 
         {/* 404 sayfa bulunamadı */}
         <Route
@@ -44,6 +46,5 @@ function App() {
     </Router>
   );
 }
-// Deploy tetikleme için eklendi
 
 export default App;
