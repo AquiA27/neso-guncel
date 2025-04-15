@@ -103,10 +103,10 @@ function MasaAsistani() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-12">
-      <div className="backdrop-blur-md bg-white/10 shadow-2xl rounded-3xl p-8 max-w-xl w-full text-white border border-white/30">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-8 sm:py-12">
+      <div className="backdrop-blur-md bg-white/10 shadow-2xl rounded-3xl p-4 sm:p-8 w-full max-w-md sm:max-w-xl text-white border border-white/30">
         <div className="text-center mb-6">
-          <h1 className="text-4xl font-extrabold drop-shadow-lg animate-pulse">
+          <h1 className="text-3xl sm:text-4xl font-extrabold drop-shadow-lg animate-pulse">
             🎙️ Neso Asistan
           </h1>
           <p className="text-sm mt-1 opacity-80">
@@ -115,7 +115,7 @@ function MasaAsistani() {
         </div>
 
         <div className="mb-4">
-          <label className="block text-lg font-semibold mb-1">🗣️ Mesajınız</label>
+          <label className="block text-base sm:text-lg font-semibold mb-1">🗣️ Mesajınız</label>
           <input
             type="text"
             value={mesaj}
@@ -126,18 +126,18 @@ function MasaAsistani() {
           />
         </div>
 
-        <div className="flex gap-3 mb-3">
+        <div className="flex flex-col sm:flex-row gap-3 mb-3">
           <button
             onClick={gonder}
             disabled={loading}
-            className="flex-1 bg-white/20 hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out"
+            className="w-full sm:flex-1 bg-white/20 hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out"
           >
             {loading ? "⏳ Bekleniyor..." : "🚀 Gönder"}
           </button>
 
           <button
             onClick={sesiDinle}
-            className={`flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
+            className={`w-full sm:flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out`}
           >
             🎤 Dinle
           </button>
