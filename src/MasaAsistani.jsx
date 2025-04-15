@@ -62,8 +62,8 @@ function MasaAsistani() {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
-      setAudioOynuyor(true);
       audio.play();
+      setTimeout(() => setAudioOynuyor(true), 100);
       audio.onended = () => setAudioOynuyor(false);
     } catch (err) {
       console.error("🎧 Sesli yanıt alınamadı:", err);
@@ -143,14 +143,15 @@ function MasaAsistani() {
           </button>
         </div>
 
-        {audioOynuyor && (
-          <button
-            onClick={durdur}
-            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out mb-4"
-          >
-            🛑 Konuşmayı Durdur
-          </button>
-        )}
+        <button
+          onClick={durdur}
+          className={`w-full font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out mb-4 ${
+            audioOynuyor ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-white/10 text-white/40 cursor-not-allowed'
+          }`}
+          disabled={!audioOynuyor}
+        >
+          🛑 Konuşmayı Durdur
+        </button>
 
         {yanit && (
           <div className="mt-4 text-sm">
