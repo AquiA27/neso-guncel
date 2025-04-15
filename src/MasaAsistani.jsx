@@ -41,32 +41,28 @@ function MasaAsistani() {
       });
       const reply = res.data.reply;
       setYanit(reply);
-      sesliYanıtVer(reply);
+      await sesliYanıtVer(reply);
     } catch (err) {
       setYanit("🛑 Sunucuya ulaşılamadı.");
     }
     setLoading(false);
   };
 
-  const oynatGoogleTTS = async (text) => {
+  const sesliYanıtVer = async (text) => {
     try {
-      const res = await axios.post("/tts", {
-        text: text,
-        lang: "tr-TR",
-        voice: "tr-TR-Wavenet-D",
-      }, { responseType: "arraybuffer" });
+      const res = await axios.post(
+        `${process.env.REACT_APP_API_BASE}/sesli-yanit`,
+        { text },
+        { responseType: "arraybuffer" }
+      );
 
       const blob = new Blob([res.data], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.play();
     } catch (err) {
-      console.error("TTS oynatma hatası:", err);
+      console.error("🎧 Sesli yanıt alınamadı:", err);
     }
-  };
-
-  const sesliYanıtVer = (text) => {
-    oynatGoogleTTS(text);
   };
 
   const sesiDinle = () => {
