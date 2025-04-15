@@ -3,40 +3,64 @@ import axios from "axios";
 
 function MenuGoruntule() {
   const [menu, setMenu] = useState([]);
+  const [aktifKategori, setAktifKategori] = useState(null);
 
   useEffect(() => {
-    axios
-      .get(`${process.env.REACT_APP_API_BASE}/menu`)
-      .then((res) => setMenu(res.data.menu))
-      .catch((err) => console.error("Menü alınamadı:", err));
+    axios.get(`${process.env.REACT_APP_API_BASE}/menu`)
+      .then(res => setMenu(res.data.menu))
+      .catch(err => console.error("Menü verisi alınamadı:", err));
   }, []);
 
-  const kategoriler = [...new Set(menu.map((item) => item.kategori))];
+  const kategoriler = [...new Set(menu.map(item => item.kategori))];
+
+  const filtreliMenu = aktifKategori
+    ? menu.filter(item => item.kategori === aktifKategori)
+    : menu;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 to-indigo-800 text-white px-6 py-10">
-      <h1 className="text-3xl font-bold text-center mb-8">📋 Menü</h1>
+    <div className="min-h-screen bg-gradient-to-b from-purple-600 via-pink-500 to-red-400 text-white p-6">
+      <h1 className="text-4xl font-bold text-center mb-6">📋 Menü</h1>
 
-      {kategoriler.map((kategori) => (
-        <div key={kategori} className="mb-6">
-          <h2 className="text-xl font-semibold mb-2 border-b border-white/30 pb-1">{kategori}</h2>
-          <ul className="grid gap-2">
-            {menu
-              .filter((item) => item.kategori === kategori)
-              .map((urun) => (
-                <li
-                  key={urun.id}
-                  className="flex justify-between bg-white/10 rounded-xl px-4 py-2"
-                >
-                  <span>{urun.urun}</span>
-                  <span>{urun.fiyat.toFixed(2)} ₺</span>
-                </li>
-              ))}
-          </ul>
-        </div>
-      ))}
+      <div className="flex flex-wrap gap-3 justify-center mb-6">
+        {kategoriler.map(kategori => (
+          <button
+            key={kategori}
+            onClick={() => setAktifKategori(kategori)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold border border-white/40 transition ${
+              aktifKategori === kategori ? "bg-white text-black" : "bg-white/20 hover:bg-white/30"
+            }`}
+          >
+            {kategori}
+          </button>
+        ))}
+
+        <button
+          onClick={() => setAktifKategori(null)}
+          className="px-4 py-2 rounded-full text-sm font-semibold border border-white/40 bg-red-400 hover:bg-red-500"
+        >
+          Tümünü Göster
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {filtreliMenu.map(item => (
+          <div
+            key={item.id}
+            className="bg-white/10 backdrop-blur-md p-4 rounded-xl shadow-xl border border-white/20"
+          >
+            <h3 className="text-xl font-semibold mb-1">{item.urun}</h3>
+            <p className="text-sm opacity-80">{item.kategori}</p>
+            <p className="mt-2 text-lg font-bold">{item.fiyat.toFixed(2)} ₺</p>
+          </div>
+        ))}
+      </div>
+
+      {filtreliMenu.length === 0 && (
+        <p className="text-center mt-10 opacity-80">Bu kategoride ürün bulunamadı.</p>
+      )}
     </div>
   );
 }
 
 export default MenuGoruntule;
+
