@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 
@@ -12,6 +12,8 @@ function MasaAsistani() {
   const [loading, setLoading] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [voicesReady, setVoicesReady] = useState(false);
+  const [audioOynuyor, setAudioOynuyor] = useState(false);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     console.log("🎙️ Sesli MasaAsistani aktif");
@@ -59,7 +61,10 @@ function MasaAsistani() {
       const blob = new Blob([res.data], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      audioRef.current = audio;
+      setAudioOynuyor(true);
       audio.play();
+      audio.onended = () => setAudioOynuyor(false);
     } catch (err) {
       console.error("🎧 Sesli yanıt alınamadı:", err);
     }
@@ -89,6 +94,14 @@ function MasaAsistani() {
     };
   };
 
+  const durdur = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setAudioOynuyor(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-12">
       <div className="backdrop-blur-md bg-white/10 shadow-2xl rounded-3xl p-8 max-w-xl w-full text-white border border-white/30">
@@ -113,7 +126,7 @@ function MasaAsistani() {
           />
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 mb-3">
           <button
             onClick={gonder}
             disabled={loading}
@@ -130,8 +143,17 @@ function MasaAsistani() {
           </button>
         </div>
 
+        {audioOynuyor && (
+          <button
+            onClick={durdur}
+            className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl transition duration-300 ease-in-out mb-4"
+          >
+            🛑 Konuşmayı Durdur
+          </button>
+        )}
+
         {yanit && (
-          <div className="mt-6 text-sm">
+          <div className="mt-4 text-sm">
             <p className="text-white/70 mb-1">
               📨 <span className="font-semibold">Mesajınız:</span> {mesaj}
             </p>
