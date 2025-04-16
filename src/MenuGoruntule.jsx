@@ -7,16 +7,27 @@ function MenuGoruntule() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get(`${process.env.REACT_APP_API_BASE}/menu`)
-      .then(res => setMenu(res.data.menu))
-      .catch(err => console.error("Menü verisi alınamadı:", err))
+    axios
+      .get(`${process.env.REACT_APP_API_BASE}/menu`)
+      .then((res) => {
+        // Backend'den gelen veriyi düzleştir
+        const duzMenu = res.data.flatMap((k) =>
+          k.urunler.map((u) => ({
+            urun: u.ad,
+            fiyat: u.fiyat,
+            kategori: k.kategori,
+          }))
+        );
+        setMenu(duzMenu);
+      })
+      .catch((err) => console.error("Menü verisi alınamadı:", err))
       .finally(() => setLoading(false));
   }, []);
 
-  const kategoriler = [...new Set(menu.map(item => item.kategori))];
+  const kategoriler = [...new Set(menu.map((item) => item.kategori))];
 
   const filtreliMenu = aktifKategori
-    ? menu.filter(item => item.kategori === aktifKategori)
+    ? menu.filter((item) => item.kategori === aktifKategori)
     : menu;
 
   return (
@@ -28,12 +39,14 @@ function MenuGoruntule() {
       ) : (
         <>
           <div className="flex flex-wrap gap-3 justify-center mb-6">
-            {kategoriler.map(kategori => (
+            {kategoriler.map((kategori) => (
               <button
                 key={kategori}
                 onClick={() => setAktifKategori(kategori)}
                 className={`px-4 py-2 rounded-full text-sm font-semibold border border-white/40 transition ${
-                  aktifKategori === kategori ? "bg-white text-black" : "bg-white/20 hover:bg-white/30"
+                  aktifKategori === kategori
+                    ? "bg-white text-black"
+                    : "bg-white/20 hover:bg-white/30"
                 }`}
               >
                 {kategori}
@@ -43,7 +56,9 @@ function MenuGoruntule() {
             <button
               onClick={() => setAktifKategori(null)}
               className={`px-4 py-2 rounded-full text-sm font-semibold border border-white/40 transition ${
-                aktifKategori === null ? "bg-white text-black" : "bg-red-400 hover:bg-red-500"
+                aktifKategori === null
+                  ? "bg-white text-black"
+                  : "bg-red-400 hover:bg-red-500"
               }`}
             >
               Tümünü Göster
@@ -51,9 +66,9 @@ function MenuGoruntule() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {filtreliMenu.map(item => (
+            {filtreliMenu.map((item, i) => (
               <div
-                key={item.id}
+                key={i}
                 className="bg-white/10 backdrop-blur-md p-4 rounded-xl shadow-xl border border-white/20"
               >
                 <h3 className="text-xl font-semibold mb-1">{item.urun}</h3>
@@ -64,7 +79,9 @@ function MenuGoruntule() {
           </div>
 
           {filtreliMenu.length === 0 && (
-            <p className="text-center mt-10 opacity-80">Bu kategoride ürün bulunamadı.</p>
+            <p className="text-center mt-10 opacity-80">
+              Bu kategoride ürün bulunamadı.
+            </p>
           )}
         </>
       )}
