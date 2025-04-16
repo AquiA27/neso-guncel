@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+} from "recharts";
 import { LogIn, LogOut, Settings2, Save } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -16,6 +19,11 @@ function AdminPaneli() {
   const [model, setModel] = useState("gpt-3.5-turbo");
   const [hiz, setHiz] = useState(1.2);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [gunluk, setGunluk] = useState(null);
+  const [aylik, setAylik] = useState(null);
+  const [yillik, setYillik] = useState([]);
+  const [populer, setPopuler] = useState([]);
+  const [online, setOnline] = useState(0);
 
   const girisYap = () => {
     if (kullaniciAdi === "admin" && sifre === "admin123") {
@@ -45,6 +53,15 @@ function AdminPaneli() {
       })
       .then((data) => setOrders(data.orders.reverse()))
       .catch((err) => console.error("Veriler alınamadı:", err));
+
+    fetch(`${API_BASE}/istatistik/gunluk`).then(res => res.json()).then(setGunluk);
+    fetch(`${API_BASE}/istatistik/aylik`).then(res => res.json()).then(setAylik);
+    fetch(`${API_BASE}/istatistik/yillik`).then(res => res.json()).then(data => {
+      const arr = Object.entries(data).map(([tarih, adet]) => ({ tarih, adet }));
+      setYillik(arr);
+    });
+    fetch(`${API_BASE}/istatistik/en-cok-satilan`).then(res => res.json()).then(setPopuler);
+    fetch(`${API_BASE}/istatistik/online`).then(res => res.json()).then(data => setOnline(data.count));
   };
 
   const ayarlariKaydet = () => {
@@ -181,14 +198,58 @@ function AdminPaneli() {
         </div>
       )}
 
+      {/* Kartlar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8 max-w-6xl mx-auto">
+        <div className="bg-white p-5 rounded shadow border text-center">
+          <h2 className="text-lg font-semibold text-gray-600 mb-2">📅 Bugünkü Sipariş</h2>
+          <p className="text-2xl font-bold text-blue-600">{gunluk?.siparis_sayisi ?? '-'}</p>
+        </div>
+        <div className="bg-white p-5 rounded shadow border text-center">
+          <h2 className="text-lg font-semibold text-gray-600 mb-2">💰 Bugünkü Gelir</h2>
+          <p className="text-2xl font-bold text-green-600">₺{gunluk?.gelir ?? '-'}</p>
+        </div>
+        <div className="bg-white p-5 rounded shadow border text-center">
+          <h2 className="text-lg font-semibold text-gray-600 mb-2">🟢 Online Kullanıcı</h2>
+          <p className="text-2xl font-bold text-purple-600">{online}</p>
+        </div>
+      </div>
+
+      {/* Grafikler */}
+      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-white p-4 rounded shadow border">
+          <h3 className="text-center text-lg font-semibold mb-4">📈 Yıllık Sipariş Sayısı</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={yillik}>
+              <XAxis dataKey="tarih" />
+              <YAxis />
+              <Tooltip />
+              <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+              <Line type="monotone" dataKey="adet" stroke="#3b82f6" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="bg-white p-4 rounded shadow border">
+          <h3 className="text-center text-lg font-semibold mb-4">🔥 En Çok Satılanlar</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={populer}>
+              <XAxis dataKey="urun" />
+              <YAxis />
+              <Tooltip />
+              <CartesianGrid strokeDasharray="3 3" />
+              <Bar dataKey="adet" fill="#10b981" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Sipariş Listesi */}
       <input
         type="text"
         placeholder="🔍 Masa no veya istek ara..."
         value={arama}
         onChange={(e) => setArama(e.target.value)}
-        className="block mx-auto w-full max-w-md p-3 mb-6 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        className="block mx-auto w-full max-w-md p-3 mt-10 mb-6 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
       />
-
       {filtrelenmis.length === 0 ? (
         <p className="text-center text-gray-500">📭 Gösterilecek sipariş yok.</p>
       ) : (
