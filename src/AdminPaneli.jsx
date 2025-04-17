@@ -20,6 +20,8 @@ function AdminPaneli() {
   const [menu, setMenu] = useState([]);
   const [yeniUrun, setYeniUrun] = useState({ ad: "", fiyat: "", kategori: "" });
   const [silUrunAdi, setSilUrunAdi] = useState("");
+  const [yeniKullaniciAdi, setYeniKullaniciAdi] = useState("");
+  const [yeniSifre, setYeniSifre] = useState("");
 
   const girisYap = () => {
     if (kullaniciAdi === "admin" && sifre === "admin123") {
@@ -63,18 +65,26 @@ function AdminPaneli() {
   };
 
   const urunSil = () => {
-    fetch(`${API_BASE}/menu/sil`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ ad: silUrunAdi })
+    fetch(`${API_BASE}/menu/sil?urun_adi=${encodeURIComponent(silUrunAdi)}`, {
+      method: "DELETE"
     })
       .then(res => res.json())
       .then(() => {
         verileriGetir();
         setSilUrunAdi("");
       });
+  };
+
+  const sifreGuncelle = () => {
+    fetch(`${API_BASE}/admin/sifre-degistir`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ yeniKullaniciAdi, yeniSifre })
+    })
+      .then(res => res.json())
+      .then(data => alert(data.mesaj || data.hata));
   };
 
   const filtrelenmis = orders.filter((o) =>
@@ -100,7 +110,6 @@ function AdminPaneli() {
     <div className="p-8 bg-gray-50 min-h-screen text-gray-800 font-sans">
       <h1 className="text-3xl font-bold mb-6 text-center">🛠️ Admin Paneli</h1>
 
-      {/* İstatistik kartları */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-5 rounded shadow border text-center">
           <h2>📅 Bugünkü Sipariş</h2>
@@ -116,7 +125,6 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Grafikler */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <div className="bg-white p-4 rounded shadow border">
           <h3 className="text-center mb-4 font-semibold">📈 Yıllık Sipariş</h3>
@@ -144,7 +152,6 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Menü Yönetimi */}
       <div className="bg-white p-6 rounded shadow border mb-10">
         <h3 className="text-xl font-bold mb-4">🍽️ Menü Yönetimi</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -173,7 +180,16 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Siparişler */}
+      {/* Şifre Değiştir */}
+      <div className="bg-white p-6 rounded shadow border mb-10">
+        <h3 className="text-xl font-bold mb-4">🔐 Yönetici Bilgilerini Güncelle</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <input type="text" placeholder="Yeni Kullanıcı Adı" value={yeniKullaniciAdi} onChange={(e) => setYeniKullaniciAdi(e.target.value)} className="p-2 border rounded" />
+          <input type="password" placeholder="Yeni Şifre" value={yeniSifre} onChange={(e) => setYeniSifre(e.target.value)} className="p-2 border rounded" />
+        </div>
+        <button onClick={sifreGuncelle} className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 mt-4">🛠️ Bilgileri Güncelle</button>
+      </div>
+
       <input type="text" placeholder="🔍 Masa no veya istek ara..." value={arama} onChange={(e) => setArama(e.target.value)} className="w-full p-2 border rounded mb-6" />
       {filtrelenmis.length === 0 ? (
         <p className="text-center text-gray-500">📭 Gösterilecek sipariş yok.</p>
