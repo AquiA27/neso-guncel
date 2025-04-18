@@ -37,7 +37,7 @@ function MasaAsistani() {
     if (!mesaj) return;
     setLoading(true);
     try {
-      const res = await axios.post(`${process.env.REACT_APP_API_BASE}/neso`, {
+      const res = await axios.post(`${process.env.REACT_APP_API_BASE}/yanitla`, {
         text: mesaj,
         masa: masaId,
       });
