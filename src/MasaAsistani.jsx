@@ -23,10 +23,7 @@ function MasaAsistani() {
     };
 
     synth.onvoiceschanged = handleVoicesChanged;
-
-    if (synth.getVoices().length > 0) {
-      setVoicesReady(true);
-    }
+    if (synth.getVoices().length > 0) setVoicesReady(true);
 
     return () => {
       synth.onvoiceschanged = null;
@@ -45,6 +42,7 @@ function MasaAsistani() {
       setYanit(reply);
       await sesliYanıtVer(reply);
     } catch (err) {
+      console.error("🛑 Hata:", err);
       setYanit("🛑 Sunucuya ulaşılamadı.");
     }
     setLoading(false);
@@ -57,13 +55,12 @@ function MasaAsistani() {
         { text },
         { responseType: "arraybuffer" }
       );
-
       const blob = new Blob([res.data], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
       audio.play();
-      setTimeout(() => setAudioOynuyor(true), 100);
+      setAudioOynuyor(true);
       audio.onended = () => setAudioOynuyor(false);
     } catch (err) {
       console.error("🎧 Sesli yanıt alınamadı:", err);
@@ -72,7 +69,7 @@ function MasaAsistani() {
 
   const sesiDinle = () => {
     if (!recognition) {
-      alert("Tarayıcınız ses tanımayı desteklemiyor.");
+      alert("Tarayıcınız ses tanımıyor.");
       return;
     }
 
