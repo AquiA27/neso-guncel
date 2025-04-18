@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
 import MutfakEkrani from "./MutfakEkrani";
-import AdminPaneli from "./pages/AdminMenu";
+import AdminMenu from "./pages/AdminMenu";
 import MenuGoruntule from "./MenuGoruntule";
 import Home from "./Home";
 import "./index.css";
@@ -11,13 +11,13 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Ana sayfa: kullanıcıya seçenek sunar */}
+        {/* Ana sayfa */}
         <Route path="/" element={<Home />} />
 
         {/* Masa ekranı */}
         <Route path="/masa/:masaId" element={<MasaAsistani />} />
 
-        {/* Menü ekranı (görüntüleme) */}
+        {/* Menü görüntüleme */}
         <Route path="/menu" element={<MenuGoruntule />} />
 
         {/* Mutfak ekranı */}
@@ -26,7 +26,7 @@ function App() {
         {/* Admin ekranı */}
         <Route path="/admin" element={<AdminMenu />} />
 
-        {/* 404 sayfa bulunamadı */}
+        {/* 404 - Sayfa bulunamadı */}
         <Route
           path="*"
           element={
