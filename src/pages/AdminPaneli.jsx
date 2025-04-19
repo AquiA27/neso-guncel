@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import CountUp from "react-countup";
 import {
-  UserCheck, Coffee, TrendingUp, Settings
+  UserCheck, Coffee, TrendingUp, Settings, LogOut
 } from "lucide-react";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
@@ -91,6 +91,11 @@ function AdminPaneli() {
       .then(data => alert(data.mesaj || data.hata));
   };
 
+  const cikisYap = () => {
+    localStorage.removeItem("adminGiris");
+    setIsLoggedIn(false);
+  };
+
   const filtrelenmis = orders.filter((o) =>
     o.masa.includes(arama) || o.istek.toLowerCase().includes(arama.toLowerCase())
   );
@@ -111,7 +116,14 @@ function AdminPaneli() {
   }
 
   return (
-    <div className="p-8 bg-gradient-to-tr from-slate-100 to-slate-200 min-h-screen text-gray-800 font-sans animate-fade-in">
+    <div className="p-8 bg-gradient-to-tr from-slate-100 to-slate-200 min-h-screen text-gray-800 font-sans animate-fade-in relative">
+      <button
+        onClick={cikisYap}
+        className="absolute top-6 right-6 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded shadow flex items-center gap-2"
+      >
+        <LogOut className="w-4 h-4" /> Çıkış Yap
+      </button>
+
       <h1 className="text-4xl font-bold mb-8 text-center flex justify-center gap-2">
         <Settings className="inline-block w-7 h-7 text-blue-500" /> Admin Paneli
       </h1>
