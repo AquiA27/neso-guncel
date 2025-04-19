@@ -9,7 +9,9 @@ const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 function AdminPaneli() {
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem("adminGiris") === "true");
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    () => localStorage.getItem("adminGiris") === "true"
+  );
   const [kullaniciAdi, setKullaniciAdi] = useState("");
   const [sifre, setSifre] = useState("");
   const [gunluk, setGunluk] = useState(null);
