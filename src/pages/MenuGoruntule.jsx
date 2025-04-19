@@ -57,7 +57,6 @@ function MenuGoruntule() {
                 {kategori}
               </button>
             ))}
-
             <button
               onClick={() => setAktifKategori(null)}
               className={`px-4 py-2 rounded-full text-sm font-semibold border border-white/40 transition ${
@@ -78,7 +77,9 @@ function MenuGoruntule() {
               >
                 <h3 className="text-xl font-semibold mb-1">{item.urun}</h3>
                 <p className="text-sm opacity-80">{item.kategori}</p>
-                <p className="mt-2 text-lg font-bold">{parseFloat(item.fiyat).toFixed(2)} ₺</p>
+                <p className="mt-2 text-lg font-bold">
+                  {parseFloat(item.fiyat).toFixed(2)} ₺
+                </p>
               </div>
             ))}
           </div>
