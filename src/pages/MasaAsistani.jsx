@@ -38,6 +38,28 @@ function MasaAsistani() {
     }
   }, [gecmis]);
 
+  const urunAyikla = (mesaj) => {
+    const urunler = [];
+    const pattern = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
+    const bilinenUrunler = ["çay", "su", "sahlep", "latte", "cheesecake", "kahve", "filtre kahve", "fincan çay"];
+
+    let match;
+    while ((match = pattern.exec(mesaj.toLowerCase())) !== null) {
+      const adet = parseInt(match[1]) || 1;
+      const urun = match[2].trim();
+      const urunEslesen = bilinenUrunler.find((u) => urun.includes(u));
+      if (urunEslesen) {
+        urunler.push({ urun: urunEslesen.charAt(0).toUpperCase() + urunEslesen.slice(1), adet });
+      }
+    }
+
+    if (urunler.length === 0 && mesaj.trim()) {
+      urunler.push({ urun: mesaj.trim(), adet: 1 });
+    }
+
+    return urunler;
+  };
+
   const gonder = async () => {
     if (!mesaj) return;
     setLoading(true);
@@ -51,15 +73,7 @@ function MasaAsistani() {
       setGecmis([...gecmis, { soru: mesaj, cevap: reply }]);
       await sesliYanıtVer(reply);
 
-      const kelimeler = mesaj.toLowerCase().split(" ");
-      const sepet = [];
-      const urunler = ["çay", "su", "kahve", "latte", "cheesecake"];
-      urunler.forEach((u) => {
-        const adet = kelimeler.filter(k => k === u).length;
-        if (adet > 0) {
-          sepet.push({ urun: u.charAt(0).toUpperCase() + u.slice(1), adet });
-        }
-      });
+      const sepet = urunAyikla(mesaj);
 
       await axios.post(
         `${process.env.REACT_APP_API_BASE}/siparis-ekle`,
