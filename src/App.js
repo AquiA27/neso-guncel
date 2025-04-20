@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import MasaAsistani from "./MasaAsistani";
-import MutfakEkrani from "./MutfakEkrani";
+import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
 import Home from "./Home";
