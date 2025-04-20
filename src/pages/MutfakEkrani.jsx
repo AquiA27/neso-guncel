@@ -22,6 +22,8 @@ function MutfakEkrani() {
 
     fetchOrders();
 
+    const interval = setInterval(fetchOrders, 20000); // 🕒 Polling süresi 20 saniyeye çıkarıldı
+
     const ws = new WebSocket(WS_URL);
     ws.onmessage = (event) => {
       const yeniSiparis = JSON.parse(event.data);
@@ -32,6 +34,7 @@ function MutfakEkrani() {
 
     return () => {
       ws.close();
+      clearInterval(interval); // 🧹 Polling temizliği
     };
   }, []);
 
