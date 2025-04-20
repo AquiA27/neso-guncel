@@ -38,9 +38,13 @@ function MutfakEkrani() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {orders.map((o, i) => {
-            const sepet = Array.isArray(JSON.parse(o.sepet || "[]"))
-              ? JSON.parse(o.sepet).filter((item) => item.urun && item.adet)
-              : [];
+            let sepet = [];
+            try {
+              const parsed = JSON.parse(o.sepet || "[]");
+              sepet = Array.isArray(parsed) ? parsed.filter((item) => item.urun && item.adet) : [];
+            } catch (e) {
+              console.error("❌ Sepet verisi çözümlenemedi:", e);
+            }
 
             return (
               <div
