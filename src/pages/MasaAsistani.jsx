@@ -51,8 +51,15 @@ function MasaAsistani() {
       setGecmis([...gecmis, { soru: mesaj, cevap: reply }]);
       await sesliYanıtVer(reply);
 
-      const urunAdi = mesaj.trim();
-      const sepet = urunAdi ? [{ urun: urunAdi, adet: 1 }] : [];
+      const kelimeler = mesaj.toLowerCase().split(" ");
+      const sepet = [];
+      const urunler = ["çay", "su", "kahve", "latte", "cheesecake"];
+      urunler.forEach((u) => {
+        const adet = kelimeler.filter(k => k === u).length;
+        if (adet > 0) {
+          sepet.push({ urun: u.charAt(0).toUpperCase() + u.slice(1), adet });
+        }
+      });
 
       await axios.post(
         `${process.env.REACT_APP_API_BASE}/siparis-ekle`,
