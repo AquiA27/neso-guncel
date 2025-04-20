@@ -9,8 +9,13 @@ function MutfakEkrani() {
 
   useEffect(() => {
     const fetchOrders = () => {
-      fetch(`${API_BASE}/siparisler`)
+      fetch(`${API_BASE}/siparisler`, {
+        headers: {
+          Authorization: "Basic " + btoa("admin:admin123")
+        }
+      })
         .then((res) => res.json())
+      
         .then((data) => setOrders(data.orders.reverse()))
         .catch((err) => console.error("Siparişler alınamadı", err));
     };
