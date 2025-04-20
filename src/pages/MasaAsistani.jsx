@@ -51,7 +51,6 @@ function MasaAsistani() {
       setGecmis([...gecmis, { soru: mesaj, cevap: reply }]);
       await sesliYanıtVer(reply);
 
-      // 🎯 Basit sepet çıkarımı
       const urunAdi = mesaj.trim();
       const sepet = urunAdi ? [{ urun: urunAdi, adet: 1 }] : [];
 
@@ -59,7 +58,7 @@ function MasaAsistani() {
         masa: masaId,
         istek: mesaj,
         yanit: reply,
-        sepet: sepet,
+        sepet: [{ urun: mesaj.trim(), adet: 1 }]
       });
     } catch (err) {
       console.error("🛑 Hata:", err);
