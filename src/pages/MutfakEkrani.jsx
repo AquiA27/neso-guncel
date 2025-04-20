@@ -1,41 +1,24 @@
 import React, { useState, useEffect } from "react";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
-const WS_URL = API_BASE.replace("http", "ws") + "/ws/mutfak";
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function MutfakEkrani() {
   const [orders, setOrders] = useState([]);
-  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     const fetchOrders = () => {
       fetch(`${API_BASE}/siparisler`, {
-        headers: {
-          Authorization: AUTH_HEADER
-        }
+        headers: { Authorization: AUTH_HEADER },
       })
         .then((res) => res.json())
         .then((data) => setOrders(data.orders.reverse()))
         .catch((err) => console.error("Siparişler alınamadı", err));
     };
 
-    fetchOrders();
-
-    const interval = setInterval(fetchOrders, 20000); // 🕒 Polling süresi 20 saniyeye çıkarıldı
-
-    const ws = new WebSocket(WS_URL);
-    ws.onmessage = (event) => {
-      const yeniSiparis = JSON.parse(event.data);
-      setOrders((prev) => [yeniSiparis, ...prev]);
-    };
-    ws.onerror = (e) => console.error("WebSocket Hata:", e);
-    setSocket(ws);
-
-    return () => {
-      ws.close();
-      clearInterval(interval); // 🧹 Polling temizliği
-    };
+    fetchOrders(); // ilk yüklemede al
+    const interval = setInterval(fetchOrders, 20000); // her 20 saniyede bir güncelle
+    return () => clearInterval(interval); // component unload olursa temizle
   }, []);
 
   const handleHazirlaniyor = (masa) => {
