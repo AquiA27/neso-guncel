@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 
 const API_BASE = process.env.REACT_APP_API_BASE;
 const WS_URL = API_BASE.replace("http", "ws") + "/ws/mutfak";
+const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function MutfakEkrani() {
   const [orders, setOrders] = useState([]);
@@ -11,11 +12,10 @@ function MutfakEkrani() {
     const fetchOrders = () => {
       fetch(`${API_BASE}/siparisler`, {
         headers: {
-          Authorization: "Basic " + btoa("admin:admin123")
+          Authorization: AUTH_HEADER
         }
       })
         .then((res) => res.json())
-      
         .then((data) => setOrders(data.orders.reverse()))
         .catch((err) => console.error("Siparişler alınamadı", err));
     };
@@ -37,12 +37,10 @@ function MutfakEkrani() {
 
   const handleHazirlaniyor = (masa) => {
     alert(`Masa ${masa} siparişi hazırlanıyor olarak işaretlendi.`);
-    // Buraya backend'e istek atılabilir
   };
 
   const handleIptal = (masa) => {
     alert(`Masa ${masa} siparişi iptal edildi.`);
-    // Buraya backend'e istek atılabilir
   };
 
   return (
@@ -91,4 +89,3 @@ function MutfakEkrani() {
 }
 
 export default MutfakEkrani;
-
