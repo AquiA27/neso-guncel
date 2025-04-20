@@ -37,37 +37,45 @@ function MutfakEkrani() {
         <p className="text-center text-gray-500">Henüz sipariş yok.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {orders.map((o, i) => (
-            <div
-              key={i}
-              className="bg-white border border-gray-200 rounded-xl shadow-md p-5 hover:shadow-lg transition-all"
-            >
-              <p className="font-semibold text-lg mb-2">🪑 Masa: {o.masa}</p>
-              <div className="bg-gray-100 rounded p-3 mb-3">
-                <p><strong>🛒 Ürünler:</strong></p>
-                <ul className="list-disc list-inside">
-                  {JSON.parse(o.sepet || "[]").map((item, index) => (
-                    <li key={index}>{item.adet} × {item.urun}</li>
-                  ))}
-                </ul>
+          {orders.map((o, i) => {
+            const sepet = Array.isArray(JSON.parse(o.sepet || "[]"))
+              ? JSON.parse(o.sepet).filter((item) => item.urun && item.adet)
+              : [];
+
+            return (
+              <div
+                key={i}
+                className="bg-white border border-gray-200 rounded-xl shadow-md p-5 hover:shadow-lg transition-all"
+              >
+                <p className="font-semibold text-lg mb-2">🪑 Masa: {o.masa}</p>
+                {sepet.length > 0 && (
+                  <div className="bg-gray-100 rounded p-3 mb-3">
+                    <p><strong>🛒 Ürünler:</strong></p>
+                    <ul className="list-disc list-inside">
+                      {sepet.map((item, index) => (
+                        <li key={index}>{item.adet} × {item.urun}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="flex justify-between mt-3">
+                  <button
+                    onClick={() => handleHazirlaniyor(o.masa)}
+                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    ✅ Hazırlanıyor
+                  </button>
+                  <button
+                    onClick={() => handleIptal(o.masa)}
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    ❌ İptal Et
+                  </button>
+                </div>
+                <p className="text-sm text-right text-gray-500 mt-2">⏰ {o.zaman}</p>
               </div>
-              <div className="flex justify-between mt-3">
-                <button
-                  onClick={() => handleHazirlaniyor(o.masa)}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
-                >
-                  ✅ Hazırlanıyor
-                </button>
-                <button
-                  onClick={() => handleIptal(o.masa)}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm"
-                >
-                  ❌ İptal Et
-                </button>
-              </div>
-              <p className="text-sm text-right text-gray-500 mt-2">⏰ {o.zaman}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -75,3 +83,4 @@ function MutfakEkrani() {
 }
 
 export default MutfakEkrani;
+
