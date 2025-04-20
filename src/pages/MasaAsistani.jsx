@@ -50,6 +50,17 @@ function MasaAsistani() {
       setYanit(reply);
       setGecmis([...gecmis, { soru: mesaj, cevap: reply }]);
       await sesliYanıtVer(reply);
+
+      // 🎯 Siparişi backend'e kaydet ve mutfağa gönder
+      await axios.post(`${process.env.REACT_APP_API_BASE}/siparis-ekle`, {
+        masa: masaId,
+        istek: mesaj,
+        yanit: reply,
+        sepet: [
+          { urun: mesaj, adet: 1 }
+        ]
+      });
+
     } catch (err) {
       console.error("🛑 Hata:", err);
       setYanit("🛑 Sunucuya ulaşılamadı.");
