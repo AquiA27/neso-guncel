@@ -44,7 +44,10 @@ function MutfakEkrani() {
               sepet = Array.isArray(parsed) ? parsed.filter((item) => item.urun && item.adet) : [];
             } catch (e) {
               console.error("❌ Sepet verisi çözümlenemedi:", e);
+              return null; // sepet parse edilemezse bu kartı gösterme
             }
+
+            if (sepet.length === 0) return null; // boş sepetli kartları gösterme
 
             return (
               <div
@@ -52,16 +55,14 @@ function MutfakEkrani() {
                 className="bg-white border border-gray-200 rounded-xl shadow-md p-5 hover:shadow-lg transition-all"
               >
                 <p className="font-semibold text-lg mb-2">🪑 Masa: {o.masa}</p>
-                {sepet.length > 0 && (
-                  <div className="bg-gray-100 rounded p-3 mb-3">
-                    <p><strong>🛒 Ürünler:</strong></p>
-                    <ul className="list-disc list-inside">
-                      {sepet.map((item, index) => (
-                        <li key={index}>{item.adet} × {item.urun}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                <div className="bg-gray-100 rounded p-3 mb-3">
+                  <p><strong>🛒 Ürünler:</strong></p>
+                  <ul className="list-disc list-inside">
+                    {sepet.map((item, index) => (
+                      <li key={index}>{item.adet} × {item.urun}</li>
+                    ))}
+                  </ul>
+                </div>
                 <div className="flex justify-between mt-3">
                   <button
                     onClick={() => handleHazirlaniyor(o.masa)}
@@ -87,4 +88,3 @@ function MutfakEkrani() {
 }
 
 export default MutfakEkrani;
-
