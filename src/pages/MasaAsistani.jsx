@@ -51,14 +51,12 @@ function MasaAsistani() {
       setGecmis([...gecmis, { soru: mesaj, cevap: reply }]);
       await sesliYanıtVer(reply);
 
-      // 🎯 Siparişi backend'e kaydet ve mutfağa gönder
+      // 🎯 Siparişi backend'e kaydet
       await axios.post(`${process.env.REACT_APP_API_BASE}/siparis-ekle`, {
         masa: masaId,
         istek: mesaj,
         yanit: reply,
-        sepet: [
-          { urun: mesaj, adet: 1 }
-        ]
+        sepet: [],
       });
 
     } catch (err) {
