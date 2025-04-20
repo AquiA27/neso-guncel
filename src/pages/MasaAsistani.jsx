@@ -54,15 +54,25 @@ function MasaAsistani() {
       const urunAdi = mesaj.trim();
       const sepet = urunAdi ? [{ urun: urunAdi, adet: 1 }] : [];
 
-      await axios.post(`${process.env.REACT_APP_API_BASE}/siparis-ekle`, {
-        masa: masaId,
-        istek: mesaj,
-        yanit: reply,
-        sepet: [{ urun: mesaj.trim(), adet: 1 }]
-      });
+      await axios.post(
+        `${process.env.REACT_APP_API_BASE}/siparis-ekle`,
+        {
+          masa: masaId,
+          istek: mesaj,
+          yanit: reply,
+          sepet,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("✅ /siparis-ekle çağrısı yapıldı");
     } catch (err) {
-      console.error("🛑 Hata:", err);
-      setYanit("🛑 Sunucuya ulaşılamadı.");
+      console.error("🛑 sipariş hatası:", err);
+      setYanit("🛑 Sipariş gönderilemedi.");
     }
     setMesaj("");
     setLoading(false);
