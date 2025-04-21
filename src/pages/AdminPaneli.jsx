@@ -127,6 +127,8 @@ function AdminPaneli() {
       <h1 className="text-4xl font-bold mb-8 text-center flex justify-center gap-2">
         <Settings className="inline-block w-7 h-7 text-blue-500" /> Admin Paneli
       </h1>
+
+      {/* İstatistik Kartları */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
         <div className="bg-gradient-to-br from-green-100 to-green-200 p-5 rounded-xl shadow-xl text-center hover:scale-105 transform transition duration-300">
           <h2 className="flex justify-center gap-2 items-center text-sm text-green-700"><Coffee className="w-4 h-4" /> Bugünkü Sipariş</h2>
@@ -148,6 +150,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Grafikler */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
         <div className="bg-white p-4 rounded shadow border animate-fade-in">
           <h3 className="text-center mb-4 font-semibold">📈 Yıllık Sipariş</h3>
@@ -175,6 +178,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Menü Yönetimi */}
       <div className="bg-white p-6 rounded shadow border mb-10 animate-fade-in">
         <h3 className="text-xl font-bold mb-4">🍽️ Menü Yönetimi</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -189,20 +193,35 @@ function AdminPaneli() {
           <button onClick={urunSil} className="bg-red-600 text-white py-2 px-4 rounded hover:bg-red-700 active:scale-95 transition">🗑️ Ürün Sil</button>
         </div>
 
+        {/* Güncellenmiş Menü Görünümü */}
         <div className="mt-6">
           {menu.map((kategori, idx) => (
-            <div key={idx} className="mb-4">
-              <h4 className="font-bold text-lg text-blue-700">{kategori.kategori}</h4>
-              <ul className="list-disc pl-5 text-sm">
+            <div
+              key={idx}
+              className="bg-blue-50 p-4 rounded-xl shadow-inner mb-6 border border-blue-200"
+            >
+              <h4 className="font-bold text-xl text-blue-800 mb-3 flex items-center gap-2">
+                🍽️ {kategori.kategori}
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {kategori.urunler.map((urun, i) => (
-                  <li key={i}>{urun.ad} - ₺{urun.fiyat}</li>
+                  <div
+                    key={i}
+                    className="bg-white rounded-lg p-3 shadow border border-gray-200 hover:shadow-md hover:scale-105 transition-transform"
+                  >
+                    <p className="text-base font-semibold text-gray-800 truncate">
+                      🥤 {urun.ad}
+                    </p>
+                    <p className="text-sm text-gray-600">₺{parseFloat(urun.fiyat).toFixed(2)}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Şifre Güncelle */}
       <div className="bg-white p-6 rounded shadow border mb-10 animate-fade-in">
         <h3 className="text-xl font-bold mb-4">🔐 Yönetici Bilgilerini Güncelle</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -212,6 +231,7 @@ function AdminPaneli() {
         <button onClick={sifreGuncelle} className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 mt-4 active:scale-95 transition">🛠️ Bilgileri Güncelle</button>
       </div>
 
+      {/* Sipariş Arama ve Listeleme */}
       <input type="text" placeholder="🔍 Masa no veya istek ara..." value={arama} onChange={(e) => setArama(e.target.value)} className="w-full p-2 border rounded mb-6" />
       {filtrelenmis.length === 0 ? (
         <p className="text-center text-gray-500">📭 Gösterilecek sipariş yok.</p>
