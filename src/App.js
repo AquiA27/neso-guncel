@@ -4,7 +4,7 @@ import MasaAsistani from "./pages/MasaAsistani";
 import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
-import Home from "./Home";
+import Home from "./pages/Home";
 import "./index.css";
 
 function App() {
