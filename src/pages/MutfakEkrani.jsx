@@ -7,6 +7,10 @@ function MutfakEkrani() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
+    document.title = "Mutfak Paneli - Neso";
+  }, []);
+
+  useEffect(() => {
     const fetchOrders = () => {
       fetch(`${API_BASE}/siparisler`, {
         headers: { Authorization: AUTH_HEADER },

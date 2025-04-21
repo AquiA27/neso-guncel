@@ -9,6 +9,10 @@ function MenuGoruntule() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    document.title = "Menü - Neso";
+  }, []);
+
+  useEffect(() => {
     axios
       .get(`${API_BASE}/menu`)
       .then((res) => {
