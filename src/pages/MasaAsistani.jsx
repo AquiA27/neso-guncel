@@ -26,6 +26,10 @@ function MasaAsistani() {
   }, []);
 
   useEffect(() => {
+    document.title = `Neso Asistan - Masa ${masaId}`;
+  }, [masaId]);
+
+  useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
