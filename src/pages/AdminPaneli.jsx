@@ -28,6 +28,10 @@ function AdminPaneli() {
   const [yeniSifre, setYeniSifre] = useState("");
 
   useEffect(() => {
+    document.title = "Admin Paneli - Neso";
+  }, []);
+
+  useEffect(() => {
     if (isLoggedIn) verileriGetir();
   }, [isLoggedIn]);
 
