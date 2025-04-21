@@ -44,21 +44,62 @@ function MasaAsistani() {
       .catch((err) => console.error("Menü verisi alınamadı:", err));
   }, []);
 
-  const urunAyikla = (mesaj) => {
-    const urunler = [];
-    const pattern = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
-    let match;
-    while ((match = pattern.exec(mesaj.toLowerCase())) !== null) {
-      const adet = parseInt(match[1]) || 1;
-      const urun = match[2].trim();
-      const urunEslesen = menuUrunler.find((u) => urun.includes(u));
-      if (urunEslesen) {
-        urunler.push({ urun: urunEslesen.charAt(0).toUpperCase() + urunEslesen.slice(1), adet });
+  const levenshteinDistance = (a, b) => {
+    const matrix = Array.from({ length: b.length + 1 }, (_, i) =>
+      Array(a.length + 1).fill(0)
+    );
+    for (let i = 0; i <= b.length; i++) matrix[i][0] = i;
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
       }
     }
-    if (urunler.length === 0 && mesaj.trim()) {
+
+    return matrix[b.length][a.length];
+  };
+
+  const urunAyikla = (mesaj) => {
+    const urunler = [];
+    const mesajKucuk = mesaj.toLowerCase();
+    const siparisIstekli = /\\b(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)\\b/i.test(mesajKucuk);
+    const temizMesaj = mesajKucuk.replace(/(\\d+)([a-zçğıöşü]+)/gi, "$1 $2");
+    const pattern = /(?:(\\d+)\\s*)?([a-zçğıöşü\\s]+)/gi;
+
+    let match;
+    while ((match = pattern.exec(temizMesaj)) !== null) {
+      const adet = parseInt(match[1]) || 1;
+      const girilenUrun = match[2].trim();
+
+      let urunEslesen = null;
+      let minMesafe = 2;
+
+      for (const menuUrun of menuUrunler) {
+        const mesafe = levenshteinDistance(girilenUrun, menuUrun);
+        if (mesafe <= minMesafe) {
+          urunEslesen = menuUrun;
+          minMesafe = mesafe;
+        }
+      }
+
+      if (urunEslesen) {
+        urunler.push({
+          urun: urunEslesen.charAt(0).toUpperCase() + urunEslesen.slice(1),
+          adet,
+        });
+      }
+    }
+
+    if (urunler.length === 0 && siparisIstekli && mesaj.trim()) {
       urunler.push({ urun: mesaj.trim(), adet: 1 });
     }
+
     return urunler;
   };
 
