@@ -68,9 +68,9 @@ function MasaAsistani() {
   const urunAyikla = (mesaj) => {
     const urunler = [];
     const mesajKucuk = mesaj.toLowerCase();
-    const siparisIstekli = /\\b(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)\\b/i.test(mesajKucuk);
-    const temizMesaj = mesajKucuk.replace(/(\\d+)([a-zçğıöşü]+)/gi, "$1 $2");
-    const pattern = /(?:(\\d+)\\s*)?([a-zçğıöşü\\s]+)/gi;
+    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mesajKucuk);
+    const temizMesaj = mesajKucuk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
+    const pattern = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
 
     let match;
     while ((match = pattern.exec(temizMesaj)) !== null) {
