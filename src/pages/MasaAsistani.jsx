@@ -15,7 +15,7 @@ function MasaAsistani() {
   const [menuUrunler, setMenuUrunler] = useState([]);
   const mesajKutusuRef = useRef(null);
 
-  // 🔊 Tarayıcı TTS konuşma yardımcı
+  // 🎙️ Tarayıcı TTS konuşma fonksiyonu
   const speak = (text, onEnd) => {
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang = "tr-TR";
@@ -29,7 +29,7 @@ function MasaAsistani() {
     synth.speak(utt);
   };
 
-  // 🚀 Karşılama ve ilk dinleme (mount)
+  // 🚀 Bileşen mount olduğunda karşılama ve otomatik dinleme
   useEffect(() => {
     const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
     if (synth.getVoices().length === 0) {
@@ -42,31 +42,32 @@ function MasaAsistani() {
     }
   }, [masaId]);
 
-  // 🏷️ Başlık
+  // 🏷️ Sayfa başlığını güncelle
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // 🔄 Otomatik scroll
+  // 🔄 Geçmiş güncellendiğinde scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // 📥 Menü verisi çek
+  // 📥 Menü verisini al
   useEffect(() => {
-    axios.get(`${process.env.REACT_APP_API_BASE}/menu`)
+    axios
+      .get(`${process.env.REACT_APP_API_BASE}/menu`)
       .then(res => {
-        const urunler = res.data.menu.flatMap(k =>
-          k.urunler.map(u => u.ad.toLowerCase())
+        const urunler = res.data.menu.flatMap(cat =>
+          cat.urunler.map(u => u.ad.toLowerCase())
         );
         setMenuUrunler(urunler);
       })
-      .catch(err => console.error("Menü verisi alınamadı:", err));
+      .catch(err => console.error("Menü alınamadı:", err));
   }, []);
 
-  // 🔢 Levenshtein mesafe
+  // 🔢 Levenshtein mesafe hesaplama
   const levenshteinDistance = (a, b) => {
     const m = Array.from({ length: b.length + 1 }, (_, i) =>
       Array(a.length + 1).fill(0)
@@ -86,11 +87,11 @@ function MasaAsistani() {
     return m[b.length][a.length];
   };
 
-  // 🍽️ Mesajdan ürün ayıkla
+  // 🍽️ Mesajdan ürün ve adet ayıkla
   const urunAyikla = msg => {
     const items = [];
     const mk = msg.toLowerCase();
-    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
+    const siparisIstekli = /(ver|getir|istiyorum|isterim|sipariş)/i.test(mk);
     const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
     const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
     let m;
@@ -109,7 +110,7 @@ function MasaAsistani() {
     return items;
   };
 
-  // 🎤 Mikrofon dinleme
+  // 🎤 Sesli dinleme
   const sesiDinle = () => {
     if (!recognition) {
       alert("Tarayıcınız ses tanımıyor.");
@@ -129,33 +130,34 @@ function MasaAsistani() {
     r.onend = () => {};
   };
 
-  // 📤 Gönder + seslendir + sipariş kaydet
+  // 📤 Gönder, seslendir ve sipariş kaydet
   const gonder = async () => {
     if (!mesaj.trim()) return;
     setLoading(true);
 
-    const original = mesaj.trim();        // ◆ eski mesajı sakla
+    const original = mesaj.trim();
     let reply = "";
 
+    // BOT yanıtını al
     try {
       const res = await axios.post(
         `${process.env.REACT_APP_API_BASE}/yanitla`,
-        { mesaj: original, masaId }
+        { text: original, masa: masaId }
       );
-      reply = res.data.cevap || "Üzgünüm, cevap alınamadı.";
+      reply = res.data.reply || "Üzgünüm, cevap alınamadı.";
     } catch (err) {
       console.error("Yanıt hatası:", err);
-      reply = "Üzgünüm, bir hata oluştu. Tekrar deneyin.";
+      reply = "Üzgünüm, bir sorun oluştu. Lütfen tekrar deneyin.";
     }
 
-    // ◆ Geçmişe ekle
+    // Geçmişe ekle
     setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
 
-    // ◆ Seslendir ve tekrar dinle
+    // Seslendir ve tekrar dinle
     speak(reply, sesiDinle);
 
-    // ◆ Siparişi kaydet
+    // Mutfak ve admin paneli için siparişi kaydet
     try {
       const sepet = urunAyikla(original);
       await axios.post(
@@ -163,7 +165,7 @@ function MasaAsistani() {
         { masa: masaId, istek: original, yanit: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
-      console.log("✅ /siparis-ekle çağrısı yapıldı");
+      console.log("✅ Sipariş mutfak & admin paneline gönderildi");
     } catch (err) {
       console.error("Sipariş kaydetme hatası:", err);
     }
@@ -178,40 +180,38 @@ function MasaAsistani() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-8 sm:py-12">
-      <div className="backdrop-blur-md bg-white/10 shadow-2xl rounded-3xl p-4 sm:p-8 w-full max-w-md sm:max-w-xl text-white border border-white/30">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl sm:text-4xl font-extrabold drop-shadow-lg animate-pulse">
-            🎙️ Neso Asistan
-          </h1>
-          <p className="text-sm mt-1 opacity-80">
-            Masa No: <span className="font-bold">{masaId}</span>
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-8">
+      <div className="bg-white/10 backdrop-blur-md shadow-2xl rounded-3xl p-6 w-full max-w-md text-white border border-white/30">
+        <h1 className="text-3xl font-extrabold text-center mb-4">
+          🎙️ Neso Asistan
+        </h1>
+        <p className="text-center mb-6 opacity-80">
+          Masa No: <span className="font-semibold">{masaId}</span>
+        </p>
 
-        <div className="mb-4">
-          <input
-            type="text"
-            value={mesaj}
-            onChange={e => setMesaj(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && gonder()}
-            placeholder="Konuş ya da yazın..."
-            className="w-full p-3 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white focus:bg-white/30"
-          />
-        </div>
+        <input
+          type="text"
+          value={mesaj}
+          onChange={e => setMesaj(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && gonder()}
+          placeholder="Konuş ya da yazın..."
+          className="w-full p-3 mb-4 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white"
+        />
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <div className="flex gap-3 mb-4">
           <button
             onClick={gonder}
             disabled={loading || audioPlaying}
-            className="w-full sm:flex-1 bg-white/20 hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition"
+            className="flex-1 bg-white/20 hover:bg-white/40 py-2 rounded-xl font-bold transition"
           >
             {loading ? "⏳ Bekleniyor..." : "🚀 Gönder"}
           </button>
           <button
             onClick={sesiDinle}
             disabled={loading || audioPlaying}
-            className={`w-full sm:flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition`}
+            className={`py-2 px-4 rounded-xl font-bold transition ${
+              micActive ? "bg-red-500" : "bg-white/20 hover:bg-white/40"
+            }`}
           >
             🎤 Dinle
           </button>
@@ -220,12 +220,19 @@ function MasaAsistani() {
         <button
           onClick={durdur}
           disabled={!audioPlaying}
-          className={`w-full py-2 mb-4 rounded-xl font-bold transition ${audioPlaying ? "bg-red-500 hover:bg-red-600 text-white" : "bg-white/10 text-white/40 cursor-not-allowed"}`}
+          className={`w-full py-2 mb-4 rounded-xl font-bold transition ${
+            audioPlaying
+              ? "bg-red-500 hover:bg-red-600 text-white"
+              : "bg-white/10 text-white/40 cursor-not-allowed"
+          }`}
         >
           🛑 Konuşmayı Durdur
         </button>
 
-        <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
+        <div
+          ref={mesajKutusuRef}
+          className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl"
+        >
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
               <div className="bg-white/20 p-2 rounded-xl text-sm">
@@ -238,9 +245,9 @@ function MasaAsistani() {
           ))}
         </div>
 
-        <div className="mt-8 text-center text-xs text-white/60">
-          ☕ Neso Asistan © {new Date().getFullYear()} | Sesli destek aktif
-        </div>
+        <p className="text-center text-xs opacity-60 mt-6">
+          ☕ Neso Asistan © {new Date().getFullYear()}
+        </p>
       </div>
     </div>
   );
