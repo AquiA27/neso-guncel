@@ -63,19 +63,18 @@ function AdminPaneli() {
   // --- API'den verileri getir ---
   const verileriGetir = () => {
     // **Siparişler**: ya data.orders ya da direkt dizi
-    fetch(`${API_BASE}/siparisler`, {
-      headers: { Authorization: AUTH_HEADER },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        const arr = Array.isArray(data)
-          ? data
-          : Array.isArray(data.orders)
-          ? data.orders
-          : [];
-        setOrders(arr.reverse());
-      })
-      .catch((err) => console.error("Veriler alınamadı:", err));
+    fetch(`${API_BASE}/siparisler`, { headers: { Authorization: AUTH_HEADER } })
+  .then(res => res.json())
+  .then(data => {
+    // hem array hem de { orders: [...] } formatını destekle
+    const raw = Array.isArray(data)
+      ? data
+      : Array.isArray(data.orders)
+        ? data.orders
+        : [];
+    setOrders(raw.reverse());
+  })
+  .catch(err => console.error("Veriler alınamadı:", err));
 
     // **İstatistikler**
     fetch(`${API_BASE}/istatistik/gunluk`)
