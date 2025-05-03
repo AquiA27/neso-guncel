@@ -21,24 +21,51 @@ function MasaAsistani() {
 
   // WebSocket bağlantısı
   useEffect(() => {
-    const wsUrl = `${API_BASE.replace('http', 'ws')}/ws/mutfak`;
-    wsRef.current = new WebSocket(wsUrl);
-    
-    wsRef.current.onopen = () => {
-      console.log("📡 WebSocket bağlantısı kuruldu");
+    const connectWebSocket = () => {
+      try {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = API_BASE.replace('https://', '').replace('http://', '');
+        const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak`;
+        
+        console.log("📡 WebSocket bağlantısı deneniyor:", wsUrl);
+        
+        wsRef.current = new WebSocket(wsUrl);
+        
+        wsRef.current.onopen = () => {
+          console.log("✅ WebSocket bağlantısı başarılı");
+        };
+
+        wsRef.current.onerror = (error) => {
+          console.error("❌ WebSocket hatası:", error);
+          setTimeout(connectWebSocket, 5000);
+        };
+
+        wsRef.current.onclose = (event) => {
+          console.log("🔌 WebSocket bağlantısı kapandı", event.code);
+          if (event.code !== 1000) {
+            setTimeout(connectWebSocket, 5000);
+          }
+        };
+
+        // Ping/Pong ile bağlantıyı canlı tut
+        const pingInterval = setInterval(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
+
+        return () => clearInterval(pingInterval);
+      } catch (error) {
+        console.error("❌ WebSocket bağlantı hatası:", error);
+        setTimeout(connectWebSocket, 5000);
+      }
     };
 
-    wsRef.current.onerror = (error) => {
-      console.error("❌ WebSocket hatası:", error);
-    };
-
-    wsRef.current.onclose = () => {
-      console.log("🔌 WebSocket bağlantısı kapandı");
-    };
+    connectWebSocket();
 
     return () => {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, "Component unmounting");
       }
     };
   }, []);
@@ -107,20 +134,34 @@ function MasaAsistani() {
 
   // Mutfağa sipariş gönderme
   const mutfagaBildir = (siparis) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify({
-          masa: masaId,
-          istek: siparis.istek,
-          sepet: siparis.sepet,
-          zaman: new Date().toISOString()
-        }));
-        console.log("📬 Sipariş mutfağa iletildi");
-      } catch (error) {
-        console.error("❌ Mutfak bildirimi hatası:", error);
+    try {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const bildirim = {
+          type: 'siparis',
+          data: {
+            masa: masaId,
+            istek: siparis.istek,
+            sepet: siparis.sepet,
+            zaman: new Date().toISOString()
+          }
+        };
+
+        wsRef.current.send(JSON.stringify(bildirim));
+        console.log("✅ Sipariş mutfağa iletildi");
+      } else {
+        throw new Error("WebSocket bağlantısı kapalı");
       }
-    } else {
-      console.warn("⚠️ WebSocket bağlantısı kapalı");
+    } catch (error) {
+      console.error("❌ Mutfak bildirimi başarısız:", error);
+      // Fallback: HTTP ile gönder
+      axios.post(`${API_BASE}/siparis-bildir`, {
+        masa: masaId,
+        istek: siparis.istek,
+        sepet: siparis.sepet,
+        zaman: new Date().toISOString()
+      }).catch(err => {
+        console.error("❌ HTTP bildirimi de başarısız:", err);
+      });
     }
   };
 
