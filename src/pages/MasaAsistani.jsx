@@ -17,69 +17,38 @@ function MasaAsistani() {
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
+  // İlk karşılama: sadece speechSynthesis (fallback TTS)
+  useEffect(() => {
+    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
+    const utt = new SpeechSynthesisUtterance(greeting);
+    utt.lang = "tr-TR";
+    synth.speak(utt);
+  }, [masaId]);
+
   // Menü verisi
   useEffect(() => {
     axios.get(`${API_BASE}/menu`)
       .then(res => {
         setMenuUrunler(
-          res.data.menu.flatMap(cat =>
-            cat.urunler.map(u => u.ad.toLowerCase())
-          )
+          res.data.menu.flatMap(cat => cat.urunler.map(u => u.ad.toLowerCase()))
         );
       })
       .catch(console.error);
   }, []);
 
-  // Sayfa başlığı
+  // Başlık
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // Otomatik scroll
+  // Scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // Karşılama (mic açmadan önce)
-  useEffect(() => {
-    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz.`;
-    sesliYanıtVer(greeting);
-    // Not: artık otomatik sesiDinle çağırmıyoruz, kullanıcı mic butonuna basacak
-  }, [masaId]);
-
-  // Google TTS ile MP3 al -> çal, hata olursa speechSynthesis fallback
-  const sesliYanıtVer = async (text, onEnd) => {
-    try {
-      const res = await axios.post(
-        `${API_BASE}/sesli-yanit`,
-        { text },
-        { responseType: "arraybuffer" }
-      );
-      const blob = new Blob([res.data], { type: "audio/mp3" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      setAudioPlaying(true);
-      // Burada autoplay kısıtlaması çıkarsa catch'e düşecek
-      await audio.play();
-      audio.onended = () => {
-        setAudioPlaying(false);
-        if (onEnd) onEnd();
-      };
-    } catch (err) {
-      console.warn("audio.play() hatası, fallback TTS:", err);
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.lang = "tr-TR";
-      utt.onend = () => {
-        if (onEnd) onEnd();
-      };
-      synth.speak(utt);
-    }
-  };
-
-  // Levenshtein distance
+  // Levenshtein
   const levenshteinDistance = (a, b) => {
     const m = Array.from({ length: b.length + 1 }, (_, i) =>
       Array(a.length + 1).fill(0)
@@ -99,27 +68,54 @@ function MasaAsistani() {
   };
 
   // Ürün ayıklama
-  const urunAyikla = msg => {
+  const urunAyikla = (msg) => {
     const items = [];
     const mk = msg.toLowerCase();
-    const pattern = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
-    let match;
-    while ((match = pattern.exec(mk)) !== null) {
-      const adet = parseInt(match[1]) || 1;
-      const gir = match[2].trim();
+    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
+    const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
+    const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
+    let m;
+    while ((m = pat.exec(temiz)) !== null) {
+      const adet = parseInt(m[1]) || 1;
+      const gir = m[2].trim();
       let best = { urun: null, puan: 0 };
       for (const u of menuUrunler) {
         const puan = 1 - levenshteinDistance(u, gir) / Math.max(u.length, gir.length);
         if (puan > best.puan) best = { urun: u, puan };
       }
-      if (best.urun && best.puan >= 0.75) items.push({ urun: best.urun, adet });
+      if (siparisIstekli && best.urun && best.puan >= 0.75) {
+        items.push({ urun: best.urun, adet });
+      }
     }
     return items;
   };
 
+  // Google TTS ile MP3 oynatma (kullanıcı etkileşimi sonrası)
+  const sesliYanıtVer = async (text) => {
+    try {
+      const res = await axios.post(
+        `${API_BASE}/sesli-yanit`,
+        { text },
+        { responseType: "arraybuffer" }
+      );
+      const blob = new Blob([res.data], { type: "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setAudioPlaying(true);
+      await audio.play(); // kullanıcı etkileşimi sonrası çağrılacak
+      audio.onended = () => setAudioPlaying(false);
+    } catch (err) {
+      console.warn("audio.play() hatası, fallback TTS:", err);
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = "tr-TR";
+      synth.speak(utt);
+    }
+  };
+
   // Sesle dinleme
   const sesiDinle = () => {
-    if (!recognition) return alert("Tarayıcı ses tanımıyor.");
+    if (!recognition) return alert("Tarayıcınız ses tanımıyor.");
     const r = new recognition();
     r.lang = "tr-TR";
     r.start();
@@ -133,10 +129,10 @@ function MasaAsistani() {
     r.onerror = () => setMicActive(false);
   };
 
-  // Gönderme
+  // Gönderme & seslendirme & sipariş kaydetme
   const gonder = async (txt) => {
     setLoading(true);
-    const original = txt || mesaj.trim();
+    const original = (txt ?? mesaj).trim();
     let reply = "";
     try {
       const res = await axios.post(
@@ -150,7 +146,6 @@ function MasaAsistani() {
     setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
     await sesliYanıtVer(reply);
-    // Sipariş kaydet
     try {
       const sepet = urunAyikla(original);
       await axios.post(
