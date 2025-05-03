@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 
+const synth = window.speechSynthesis;
+const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;  // <-- Tanım eklendi
+
 const API_BASE = process.env.REACT_APP_API_BASE;
 
 function MasaAsistani() {
