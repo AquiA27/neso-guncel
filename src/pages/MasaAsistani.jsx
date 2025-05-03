@@ -14,7 +14,6 @@ function MasaAsistani() {
   const [micActive, setMicActive] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [menuUrunler, setMenuUrunler] = useState([]);
-  const [greeted, setGreeted] = useState(false);
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
@@ -29,7 +28,7 @@ function MasaAsistani() {
       .catch(console.error);
   }, []);
 
-  // Sayfa başlığı
+  // Başlık
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
@@ -41,46 +40,33 @@ function MasaAsistani() {
     }
   }, [gecmis]);
 
-  // Kullanıcı ilk tıklamada karşılama
+  // Karşılama mesajı (mount anında)
   useEffect(() => {
-    const handleFirstClick = () => {
-      if (!greeted) {
-        speakGreeting();
-        setGreeted(true);
-      }
-      document.removeEventListener("click", handleFirstClick);
-    };
-    document.addEventListener("click", handleFirstClick);
-    return () => document.removeEventListener("click", handleFirstClick);
-  }, [greeted]);
-
-  // Google TTS kullanarak karşılama
-  const speakGreeting = () => {
     const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    sesliYanıtVer(greeting);
-  };
+    // İlk olarak Google TTS ile dene
+    sesliYanıtVer(greeting)
+      .catch(() => {
+        // Hata olursa fallback olarak yerel TTS
+        const utt = new SpeechSynthesisUtterance(greeting);
+        utt.lang = "tr-TR";
+        synth.speak(utt);
+      });
+  }, [masaId]);
 
   // Google TTS MP3 çalma
   const sesliYanıtVer = async (text) => {
-    try {
-      const res = await axios.post(
-        `${API_BASE}/sesli-yanit`,
-        { text },
-        { responseType: "arraybuffer" }
-      );
-      const blob = new Blob([res.data], { type: "audio/mp3" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      setAudioPlaying(true);
-      await audio.play();
-      audio.onended = () => setAudioPlaying(false);
-    } catch (err) {
-      console.warn("audio.play() hatası, fallback TTS:", err);
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.lang = "tr-TR";
-      synth.speak(utt);
-    }
+    const res = await axios.post(
+      `${API_BASE}/sesli-yanit`,
+      { text },
+      { responseType: "arraybuffer" }
+    );
+    const blob = new Blob([res.data], { type: "audio/mp3" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    setAudioPlaying(true);
+    await audio.play();
+    audio.onended = () => setAudioPlaying(false);
   };
 
   // Sesle dinleme
@@ -115,12 +101,19 @@ function MasaAsistani() {
     }
     setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
-    await sesliYanıtVer(reply);
+    try {
+      await sesliYanıtVer(reply);
+    } catch (err) {
+      console.warn("TTS fallback:", err);
+      const utt = new SpeechSynthesisUtterance(reply);
+      utt.lang = "tr-TR";
+      synth.speak(utt);
+    }
     try {
       const sepet = urunAyikla(original);
       await axios.post(
         `${API_BASE}/siparis-ekle`,
-        { masa: masaId, istek: original, yanit: reply, sepet },
+        { masaId, istek: original, cevap: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
     } catch (err) {
