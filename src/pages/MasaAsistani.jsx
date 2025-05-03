@@ -3,8 +3,7 @@ import axios from "axios";
 import { useParams } from "react-router-dom";
 
 const synth = window.speechSynthesis;
-const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;  // <-- Tanım eklendi
-
+const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const API_BASE = process.env.REACT_APP_API_BASE;
 
 function MasaAsistani() {
@@ -18,80 +17,39 @@ function MasaAsistani() {
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
-  // 📥 Menü verisini al
+  // Menü verisi
   useEffect(() => {
     axios.get(`${API_BASE}/menu`)
       .then(res => {
-        const urunler = res.data.menu.flatMap(cat =>
-          cat.urunler.map(u => u.ad.toLowerCase())
+        setMenuUrunler(
+          res.data.menu.flatMap(cat =>
+            cat.urunler.map(u => u.ad.toLowerCase())
+          )
         );
-        setMenuUrunler(urunler);
       })
-      .catch(err => console.error("Menü alınamadı:", err));
+      .catch(console.error);
   }, []);
 
-  // 🏷️ Başlık güncelle
+  // Sayfa başlığı
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // 🔄 Otomatik scroll
+  // Otomatik scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // 🚀 Karşılama
+  // Karşılama (mic açmadan önce)
   useEffect(() => {
-    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    sesliYanıtVer(greeting, sesiDinle);
+    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz.`;
+    sesliYanıtVer(greeting);
+    // Not: artık otomatik sesiDinle çağırmıyoruz, kullanıcı mic butonuna basacak
   }, [masaId]);
 
-  // 🔢 Levenshtein mesafe hesaplama
-  const levenshteinDistance = (a, b) => {
-    const m = Array.from({ length: b.length + 1 }, (_, i) =>
-      Array(a.length + 1).fill(0)
-    );
-    for (let i = 0; i <= b.length; i++) m[i][0] = i;
-    for (let j = 0; j <= a.length; j++) m[0][j] = j;
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        const cost = a[j - 1] === b[i - 1] ? 0 : 1;
-        m[i][j] = Math.min(
-          m[i - 1][j] + 1,
-          m[i][j - 1] + 1,
-          m[i - 1][j - 1] + cost
-        );
-      }
-    }
-    return m[b.length][a.length];
-  };
-
-  // 🍽️ Mesajdan ürün ayıkla
-  const urunAyikla = msg => {
-    const items = [];
-    const mk = msg.toLowerCase();
-    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
-    const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
-    const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
-    let m;
-    while ((m = pat.exec(temiz)) !== null) {
-      const adet = parseInt(m[1]) || 1;
-      const gir = m[2].trim();
-      let best = { urun: null, puan: 0 };
-      for (const u of menuUrunler) {
-        const puan = 1 - levenshteinDistance(u, gir) / Math.max(u.length, gir.length);
-        if (puan > best.puan) best = { urun: u, puan };
-      }
-      if (siparisIstekli && best.urun && best.puan >= 0.75) {
-        items.push({ urun: best.urun, adet });
-      }
-    }
-    return items;
-  };
-
-  // 🎧 Google TTS endpoint’inden MP3 alıp oynat
+  // Google TTS ile MP3 al -> çal, hata olursa speechSynthesis fallback
   const sesliYanıtVer = async (text, onEnd) => {
     try {
       const res = await axios.post(
@@ -104,22 +62,62 @@ function MasaAsistani() {
       const audio = new Audio(url);
       audioRef.current = audio;
       setAudioPlaying(true);
+      // Burada autoplay kısıtlaması çıkarsa catch'e düşecek
+      await audio.play();
       audio.onended = () => {
         setAudioPlaying(false);
         if (onEnd) onEnd();
       };
-      audio.play();
     } catch (err) {
-      console.error("🎧 Google TTS hatası:", err);
-      // fallback yerelde konuş
+      console.warn("audio.play() hatası, fallback TTS:", err);
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = "tr-TR";
-      utt.onend = () => { if (onEnd) onEnd(); };
-      window.speechSynthesis.speak(utt);
+      utt.onend = () => {
+        if (onEnd) onEnd();
+      };
+      synth.speak(utt);
     }
   };
 
-  // 🎤 Sesle dinleme
+  // Levenshtein distance
+  const levenshteinDistance = (a, b) => {
+    const m = Array.from({ length: b.length + 1 }, (_, i) =>
+      Array(a.length + 1).fill(0)
+    );
+    for (let i = 0; i <= b.length; i++) m[i][0] = i;
+    for (let j = 0; j <= a.length; j++) m[0][j] = j;
+    for (let i = 1; i <= b.length; i++)
+      for (let j = 1; j <= a.length; j++) {
+        const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+        m[i][j] = Math.min(
+          m[i - 1][j] + 1,
+          m[i][j - 1] + 1,
+          m[i - 1][j - 1] + cost
+        );
+      }
+    return m[b.length][a.length];
+  };
+
+  // Ürün ayıklama
+  const urunAyikla = msg => {
+    const items = [];
+    const mk = msg.toLowerCase();
+    const pattern = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
+    let match;
+    while ((match = pattern.exec(mk)) !== null) {
+      const adet = parseInt(match[1]) || 1;
+      const gir = match[2].trim();
+      let best = { urun: null, puan: 0 };
+      for (const u of menuUrunler) {
+        const puan = 1 - levenshteinDistance(u, gir) / Math.max(u.length, gir.length);
+        if (puan > best.puan) best = { urun: u, puan };
+      }
+      if (best.urun && best.puan >= 0.75) items.push({ urun: best.urun, adet });
+    }
+    return items;
+  };
+
+  // Sesle dinleme
   const sesiDinle = () => {
     if (!recognition) return alert("Tarayıcı ses tanımıyor.");
     const r = new recognition();
@@ -135,27 +133,24 @@ function MasaAsistani() {
     r.onerror = () => setMicActive(false);
   };
 
-  // 📤 Gönder, seslendir ve mutfak/admin’e kaydet
+  // Gönderme
   const gonder = async (txt) => {
     setLoading(true);
     const original = txt || mesaj.trim();
     let reply = "";
-
     try {
       const res = await axios.post(
         `${API_BASE}/yanitla`,
         { text: original, masa: masaId }
       );
       reply = res.data.reply;
-    } catch (err) {
-      console.error("Yanıt hatası:", err);
+    } catch {
       reply = "Üzgünüm, bir sorun oluştu. Lütfen tekrar deneyin.";
     }
-
     setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
-    sesliYanıtVer(reply, sesiDinle);
-
+    await sesliYanıtVer(reply);
+    // Sipariş kaydet
     try {
       const sepet = urunAyikla(original);
       await axios.post(
@@ -163,15 +158,13 @@ function MasaAsistani() {
         { masa: masaId, istek: original, yanit: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
-      console.log("✅ Sipariş mutfak & admin paneline gitti");
     } catch (err) {
       console.error("Sipariş kaydetme hatası:", err);
     }
-
     setLoading(false);
   };
 
-  // ⏹️ Durdur
+  // Konuşmayı durdur
   const durdur = () => {
     if (audioRef.current) {
       audioRef.current.pause();
