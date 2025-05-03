@@ -17,15 +17,7 @@ function MasaAsistani() {
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
-  // İlk karşılama: sadece speechSynthesis (fallback TTS)
-  useEffect(() => {
-    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    const utt = new SpeechSynthesisUtterance(greeting);
-    utt.lang = "tr-TR";
-    synth.speak(utt);
-  }, [masaId]);
-
-  // Menü verisi
+  // 📥 Menü verisini al
   useEffect(() => {
     axios.get(`${API_BASE}/menu`)
       .then(res => {
@@ -36,19 +28,39 @@ function MasaAsistani() {
       .catch(console.error);
   }, []);
 
-  // Başlık
+  // 🏷️ Başlık
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // Scroll
+  // 🔄 Otomatik scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // Levenshtein
+  // 🚀 Karşılama: ses paketleri hazır olana kadar bekle
+  useEffect(() => {
+    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
+    const speakGreeting = () => {
+      const utt = new SpeechSynthesisUtterance(greeting);
+      utt.lang = "tr-TR";
+      utt.rate = 1.3;
+      utt.pitch = 1.0;
+      synth.speak(utt);
+    };
+    if (synth.getVoices().length > 0) {
+      speakGreeting();
+    } else {
+      synth.onvoiceschanged = () => {
+        synth.onvoiceschanged = null;
+        speakGreeting();
+      };
+    }
+  }, [masaId]);
+
+  // 🔢 Levenshtein mesafe
   const levenshteinDistance = (a, b) => {
     const m = Array.from({ length: b.length + 1 }, (_, i) =>
       Array(a.length + 1).fill(0)
@@ -67,8 +79,8 @@ function MasaAsistani() {
     return m[b.length][a.length];
   };
 
-  // Ürün ayıklama
-  const urunAyikla = (msg) => {
+  // 🍽️ Ürün ayıklama
+  const urunAyikla = msg => {
     const items = [];
     const mk = msg.toLowerCase();
     const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
@@ -90,7 +102,7 @@ function MasaAsistani() {
     return items;
   };
 
-  // Google TTS ile MP3 oynatma (kullanıcı etkileşimi sonrası)
+  // 🎧 Google TTS MP3 çalma (kullanıcı etkileşimi sonrası güvenli)
   const sesliYanıtVer = async (text) => {
     try {
       const res = await axios.post(
@@ -103,7 +115,7 @@ function MasaAsistani() {
       const audio = new Audio(url);
       audioRef.current = audio;
       setAudioPlaying(true);
-      await audio.play(); // kullanıcı etkileşimi sonrası çağrılacak
+      await audio.play();
       audio.onended = () => setAudioPlaying(false);
     } catch (err) {
       console.warn("audio.play() hatası, fallback TTS:", err);
@@ -113,9 +125,9 @@ function MasaAsistani() {
     }
   };
 
-  // Sesle dinleme
+  // 🎤 Sesle dinleme
   const sesiDinle = () => {
-    if (!recognition) return alert("Tarayıcınız ses tanımıyor.");
+    if (!recognition) return alert("Tarayıcı ses tanımıyor.");
     const r = new recognition();
     r.lang = "tr-TR";
     r.start();
@@ -129,7 +141,7 @@ function MasaAsistani() {
     r.onerror = () => setMicActive(false);
   };
 
-  // Gönderme & seslendirme & sipariş kaydetme
+  // 📤 Gönderme & seslendirme & sipariş kaydetme
   const gonder = async (txt) => {
     setLoading(true);
     const original = (txt ?? mesaj).trim();
@@ -159,7 +171,7 @@ function MasaAsistani() {
     setLoading(false);
   };
 
-  // Konuşmayı durdur
+  // ⏹️ Konuşmayı durdur
   const durdur = () => {
     if (audioRef.current) {
       audioRef.current.pause();
