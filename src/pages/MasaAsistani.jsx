@@ -32,7 +32,6 @@ function MasaAsistani() {
   // 🚀 Karşılama ve ilk dinleme (mount)
   useEffect(() => {
     const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    // Eğer ses paketleri henüz yüklenmediyse, yüklenince konuş:
     if (synth.getVoices().length === 0) {
       synth.onvoiceschanged = () => {
         synth.onvoiceschanged = null;
@@ -43,19 +42,19 @@ function MasaAsistani() {
     }
   }, [masaId]);
 
-  // 🏷️ Sayfa başlığını güncelle
+  // 🏷️ Başlık
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // 🔄 Mesaj geçmişi güncellenince scroll
+  // 🔄 Otomatik scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // 📥 Menü verisini backend’den çek
+  // 📥 Menü verisi çek
   useEffect(() => {
     axios.get(`${process.env.REACT_APP_API_BASE}/menu`)
       .then(res => {
@@ -64,12 +63,10 @@ function MasaAsistani() {
         );
         setMenuUrunler(urunler);
       })
-      .catch(err => {
-        console.error("Menü verisi alınamadı:", err);
-      });
+      .catch(err => console.error("Menü verisi alınamadı:", err));
   }, []);
 
-  // 🔢 Levenshtein mesafe hesaplama
+  // 🔢 Levenshtein mesafe
   const levenshteinDistance = (a, b) => {
     const m = Array.from({ length: b.length + 1 }, (_, i) =>
       Array(a.length + 1).fill(0)
@@ -89,58 +86,61 @@ function MasaAsistani() {
     return m[b.length][a.length];
   };
 
-  // 🍽️ Mesajdan ürün ve adet ayıkla
-  const urunAyikla = (msg) => {
-    const urunler = [];
+  // 🍽️ Mesajdan ürün ayıkla
+  const urunAyikla = msg => {
+    const items = [];
     const mk = msg.toLowerCase();
     const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
     const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
     const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
-    let match;
-    while ((match = pat.exec(temiz)) !== null) {
-      const adet = parseInt(match[1]) || 1;
-      const gir = match[2].trim();
+    let m;
+    while ((m = pat.exec(temiz)) !== null) {
+      const adet = parseInt(m[1]) || 1;
+      const gir = m[2].trim();
       let best = { urun: null, puan: 0 };
-      for (const mu of menuUrunler) {
-        const puan = 1 - levenshteinDistance(mu, gir) / Math.max(mu.length, gir.length);
-        if (puan > best.puan) best = { urun: mu, puan };
+      for (const u of menuUrunler) {
+        const puan = 1 - levenshteinDistance(u, gir) / Math.max(u.length, gir.length);
+        if (puan > best.puan) best = { urun: u, puan };
       }
       if (siparisIstekli && best.urun && best.puan >= 0.75) {
-        urunler.push({ urun: best.urun, adet });
+        items.push({ urun: best.urun, adet });
       }
     }
-    return urunler;
+    return items;
   };
 
-  // 🎤 Sesle dinleme + gonder()
+  // 🎤 Mikrofon dinleme
   const sesiDinle = () => {
     if (!recognition) {
       alert("Tarayıcınız ses tanımıyor.");
       return;
     }
-    const recog = new recognition();
-    recog.lang = "tr-TR";
-    recog.start();
+    const r = new recognition();
+    r.lang = "tr-TR";
+    r.start();
     setMicActive(true);
-    recog.onresult = async e => {
+    r.onresult = async e => {
       const txt = e.results[0][0].transcript;
       setMicActive(false);
       setMesaj(txt);
       await gonder();
     };
-    recog.onerror = () => setMicActive(false);
-    recog.onend = () => {};
+    r.onerror = () => setMicActive(false);
+    r.onend = () => {};
   };
 
-  // 📤 Mesajı API’ye yolla, geçmişe ekle, sesle yanıtla + sipariş kaydet
+  // 📤 Gönder + seslendir + sipariş kaydet
   const gonder = async () => {
     if (!mesaj.trim()) return;
     setLoading(true);
+
+    const original = mesaj.trim();        // ◆ eski mesajı sakla
     let reply = "";
+
     try {
       const res = await axios.post(
         `${process.env.REACT_APP_API_BASE}/yanitla`,
-        { mesaj, masaId }
+        { mesaj: original, masaId }
       );
       reply = res.data.cevap || "Üzgünüm, cevap alınamadı.";
     } catch (err) {
@@ -148,28 +148,24 @@ function MasaAsistani() {
       reply = "Üzgünüm, bir hata oluştu. Tekrar deneyin.";
     }
 
-    // Geçmişe ekle
-    setGecmis(prev => [...prev, { soru: mesaj, cevap: reply }]);
+    // ◆ Geçmişe ekle
+    setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
-    // Sesli yanıt ve ardından tekrar dinleme
+
+    // ◆ Seslendir ve tekrar dinle
     speak(reply, sesiDinle);
 
-    // Siparişi kaydet
+    // ◆ Siparişi kaydet
     try {
-      const sepet = urunAyikla(mesaj);
+      const sepet = urunAyikla(original);
       await axios.post(
         `${process.env.REACT_APP_API_BASE}/siparis-ekle`,
-        {
-          masa: masaId,
-          istek: mesaj,
-          yanit: reply,
-          sepet
-        },
+        { masa: masaId, istek: original, yanit: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
       console.log("✅ /siparis-ekle çağrısı yapıldı");
     } catch (err) {
-      console.error("📦 Sipariş kaydetme hatası:", err);
+      console.error("Sipariş kaydetme hatası:", err);
     }
 
     setLoading(false);
@@ -194,16 +190,13 @@ function MasaAsistani() {
         </div>
 
         <div className="mb-4">
-          <label className="block text-base sm:text-lg font-semibold mb-1">
-            🗣️ Mesajınız
-          </label>
           <input
             type="text"
             value={mesaj}
             onChange={e => setMesaj(e.target.value)}
             onKeyDown={e => e.key === "Enter" && gonder()}
             placeholder="Konuş ya da yazın..."
-            className="w-full p-3 rounded-xl bg-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white focus:bg-white/30"
+            className="w-full p-3 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white focus:bg-white/30"
           />
         </div>
 
@@ -218,9 +211,7 @@ function MasaAsistani() {
           <button
             onClick={sesiDinle}
             disabled={loading || audioPlaying}
-            className={`w-full sm:flex-1 ${
-              micActive ? "bg-red-500" : "bg-white/20"
-            } hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition`}
+            className={`w-full sm:flex-1 ${micActive ? "bg-red-500" : "bg-white/20"} hover:bg-white/40 text-white font-bold py-2 px-4 rounded-xl transition`}
           >
             🎤 Dinle
           </button>
@@ -229,19 +220,12 @@ function MasaAsistani() {
         <button
           onClick={durdur}
           disabled={!audioPlaying}
-          className={`w-full font-bold py-2 px-4 rounded-xl mb-4 ${
-            audioPlaying
-              ? "bg-red-500 hover:bg-red-600 text-white"
-              : "bg-white/10 text-white/40 cursor-not-allowed"
-          } transition`}
+          className={`w-full py-2 mb-4 rounded-xl font-bold transition ${audioPlaying ? "bg-red-500 hover:bg-red-600 text-white" : "bg-white/10 text-white/40 cursor-not-allowed"}`}
         >
           🛑 Konuşmayı Durdur
         </button>
 
-        <div
-          ref={mesajKutusuRef}
-          className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl"
-        >
+        <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
               <div className="bg-white/20 p-2 rounded-xl text-sm">
