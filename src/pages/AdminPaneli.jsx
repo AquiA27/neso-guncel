@@ -17,6 +17,7 @@ const API_BASE = process.env.REACT_APP_API_BASE;
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function AdminPaneli() {
+  // --- State'ler ---
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(
@@ -35,14 +36,21 @@ function AdminPaneli() {
   const [yeniKullaniciAdi, setYeniKullaniciAdi] = useState("");
   const [yeniSifre, setYeniSifre] = useState("");
 
+  // --- Document title ---
   useEffect(() => {
     document.title = "Admin Paneli - Neso";
   }, []);
 
+  // --- Veri çekimi (login sonrası ve 5 saniyede bir) ---
   useEffect(() => {
-    if (isLoggedIn) verileriGetir();
+    if (isLoggedIn) {
+      verileriGetir();
+      const interval = setInterval(verileriGetir, 5000);
+      return () => clearInterval(interval);
+    }
   }, [isLoggedIn]);
 
+  // --- Giriş fonksiyonu ---
   const girisYap = () => {
     if (kullaniciAdi === "admin" && sifre === "admin123") {
       setIsLoggedIn(true);
@@ -52,35 +60,60 @@ function AdminPaneli() {
     }
   };
 
+  // --- API'den verileri getir ---
   const verileriGetir = () => {
-    fetch(`${API_BASE}/siparisler`, { headers: { Authorization: AUTH_HEADER } })
+    // **Siparişler**: ya data.orders ya da direkt dizi
+    fetch(`${API_BASE}/siparisler`, {
+      headers: { Authorization: AUTH_HEADER },
+    })
       .then((res) => res.json())
-      .then((data) => setOrders(data.orders.reverse()))
+      .then((data) => {
+        const arr = Array.isArray(data)
+          ? data
+          : Array.isArray(data.orders)
+          ? data.orders
+          : [];
+        setOrders(arr.reverse());
+      })
       .catch((err) => console.error("Veriler alınamadı:", err));
 
+    // **İstatistikler**
     fetch(`${API_BASE}/istatistik/gunluk`)
       .then((res) => res.json())
-      .then(setGunluk);
+      .then(setGunluk)
+      .catch(console.error);
+
     fetch(`${API_BASE}/istatistik/aylik`)
       .then((res) => res.json())
-      .then(setAylik);
+      .then(setAylik)
+      .catch(console.error);
+
     fetch(`${API_BASE}/istatistik/yillik`)
       .then((res) => res.json())
       .then((data) => {
         const arr = Object.entries(data).map(([tarih, adet]) => ({ tarih, adet }));
         setYillik(arr);
-      });
+      })
+      .catch(console.error);
+
     fetch(`${API_BASE}/istatistik/en-cok-satilan`)
       .then((res) => res.json())
-      .then(setPopuler);
+      .then(setPopuler)
+      .catch(console.error);
+
     fetch(`${API_BASE}/istatistik/online`)
       .then((res) => res.json())
-      .then((data) => setOnline(data.count));
+      .then((d) => setOnline(d.count))
+      .catch(console.error);
+
+    // **Menü**
     fetch(`${API_BASE}/menu`)
       .then((res) => res.json())
-      .then((data) => setMenu(data.menu || []));
+      .then((d) => setMenu(d.menu || []))
+      .catch(console.error);
   };
 
+  // --- Menü yönetimi ---
   const urunEkle = () => {
     fetch(`${API_BASE}/menu/ekle`, {
       method: "POST",
@@ -91,7 +124,8 @@ function AdminPaneli() {
       .then(() => {
         verileriGetir();
         setYeniUrun({ ad: "", fiyat: "", kategori: "" });
-      });
+      })
+      .catch(console.error);
   };
 
   const urunSil = () => {
@@ -105,9 +139,11 @@ function AdminPaneli() {
       .then(() => {
         verileriGetir();
         setSilUrunAdi("");
-      });
+      })
+      .catch(console.error);
   };
 
+  // --- Şifre güncelleme ---
   const sifreGuncelle = () => {
     fetch(`${API_BASE}/admin/sifre-degistir`, {
       method: "POST",
@@ -115,20 +151,24 @@ function AdminPaneli() {
       body: JSON.stringify({ yeniKullaniciAdi, yeniSifre }),
     })
       .then((res) => res.json())
-      .then((data) => alert(data.mesaj || data.hata));
+      .then((d) => alert(d.mesaj || d.hata))
+      .catch(console.error);
   };
 
+  // --- Çıkış ---
   const cikisYap = () => {
     localStorage.removeItem("adminGiris");
     setIsLoggedIn(false);
   };
 
+  // --- Arama filtresi ---
   const filtrelenmis = orders.filter(
     (o) =>
-      o.masa.includes(arama) ||
-      o.istek.toLowerCase().includes(arama.toLowerCase())
+      String(o.masa).includes(arama) ||
+      String(o.istek).toLowerCase().includes(arama.toLowerCase())
   );
 
+  // --- Login ekranı ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 to-indigo-100">
@@ -164,6 +204,7 @@ function AdminPaneli() {
     );
   }
 
+  // --- Admin paneli ana ekranı ---
   return (
     <div className="p-8 bg-gradient-to-tr from-slate-100 to-slate-200 min-h-screen text-gray-800 font-sans animate-fade-in relative">
       <button
