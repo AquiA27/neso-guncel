@@ -14,26 +14,31 @@ function MasaAsistani() {
   const [micActive, setMicActive] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [menuUrunler, setMenuUrunler] = useState([]);
-  const [karsilamaYapildi, setKarsilamaYapildi] = useState(false);
+  const [karsilamaBeklemede, setKarsilamaBeklemede] = useState(true);
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
-  const ws = useRef(null);
+  const wsRef = useRef(null);
 
   // WebSocket bağlantısı
   useEffect(() => {
-    ws.current = new WebSocket(`${API_BASE.replace('http', 'ws')}/ws/mutfak`);
+    const wsUrl = `${API_BASE.replace('http', 'ws')}/ws/mutfak`;
+    wsRef.current = new WebSocket(wsUrl);
     
-    ws.current.onopen = () => {
-      console.log("WebSocket bağlantısı açıldı");
+    wsRef.current.onopen = () => {
+      console.log("📡 WebSocket bağlantısı kuruldu");
     };
 
-    ws.current.onerror = (error) => {
-      console.error("WebSocket hatası:", error);
+    wsRef.current.onerror = (error) => {
+      console.error("❌ WebSocket hatası:", error);
+    };
+
+    wsRef.current.onclose = () => {
+      console.log("🔌 WebSocket bağlantısı kapandı");
     };
 
     return () => {
-      if (ws.current) {
-        ws.current.close();
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
   }, []);
@@ -43,19 +48,33 @@ function MasaAsistani() {
     const fetchMenu = async () => {
       try {
         const res = await axios.get(`${API_BASE}/menu`);
-        setMenuUrunler(
-          res.data.menu.flatMap((cat) => cat.urunler.map((u) => u.ad.toLowerCase()))
+        const menuItems = res.data.menu.flatMap((cat) => 
+          cat.urunler.map((u) => ({
+            ...u,
+            ad: u.ad.toLowerCase(),
+            kategori: cat.kategori
+          }))
         );
+        setMenuUrunler(menuItems);
       } catch (error) {
-        console.error("Menü verisi alınamadı:", error);
+        console.error("❌ Menü verisi alınamadı:", error);
       }
     };
     fetchMenu();
   }, []);
 
-  // Başlık
+  // Başlık ve karşılama kontrolü
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
+    
+    const karsilamaKey = `karsilama_${masaId}`;
+    const karsilamaDone = localStorage.getItem(karsilamaKey);
+    
+    if (!karsilamaDone) {
+      setKarsilamaBeklemede(true);
+    } else {
+      setKarsilamaBeklemede(false);
+    }
   }, [masaId]);
 
   // Scroll
@@ -65,39 +84,43 @@ function MasaAsistani() {
     }
   }, [gecmis]);
 
-  // Karşılama mesajı - LocalStorage ile kontrol
-  useEffect(() => {
-    const karsilamaKey = `karsilama_${masaId}`;
-    const karsilamaDone = localStorage.getItem(karsilamaKey);
-    
-    if (!karsilamaDone && !karsilamaYapildi) {
+  // Karşılama mesajını çal
+  const handleInputFocus = async () => {
+    if (karsilamaBeklemede) {
+      const karsilamaKey = `karsilama_${masaId}`;
       const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-      sesliYanıtVer(greeting).catch(() => {
+      
+      try {
+        await sesliYanıtVer(greeting);
+        setGecmis([{ soru: "", cevap: greeting }]);
+        localStorage.setItem(karsilamaKey, 'true');
+      } catch (error) {
+        console.warn("⚠️ Fallback TTS kullanılıyor:", error);
         const utt = new SpeechSynthesisUtterance(greeting);
         utt.lang = "tr-TR";
         synth.speak(utt);
-      });
-      setKarsilamaYapildi(true);
-      localStorage.setItem(karsilamaKey, 'true');
+      }
       
-      // Karşılama mesajını geçmişe ekle
-      setGecmis([{ soru: "", cevap: greeting }]);
+      setKarsilamaBeklemede(false);
     }
-  }, [masaId, karsilamaYapildi]);
+  };
 
   // Mutfağa sipariş gönderme
   const mutfagaBildir = (siparis) => {
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       try {
-        ws.current.send(JSON.stringify({
+        wsRef.current.send(JSON.stringify({
           masa: masaId,
           istek: siparis.istek,
           sepet: siparis.sepet,
           zaman: new Date().toISOString()
         }));
+        console.log("📬 Sipariş mutfağa iletildi");
       } catch (error) {
-        console.error("Mutfağa bildirim hatası:", error);
+        console.error("❌ Mutfak bildirimi hatası:", error);
       }
+    } else {
+      console.warn("⚠️ WebSocket bağlantısı kapalı");
     }
   };
 
@@ -112,17 +135,56 @@ function MasaAsistani() {
       const blob = new Blob([res.data], { type: "audio/mp3" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
       audioRef.current = audio;
       setAudioPlaying(true);
+      
       await audio.play();
+      
       audio.onended = () => {
         setAudioPlaying(false);
-        URL.revokeObjectURL(url); // Bellek temizliği
+        URL.revokeObjectURL(url);
       };
     } catch (error) {
-      console.error("Google TTS ile sesli yanıt alınamadı:", error);
+      console.error("❌ Google TTS hatası:", error);
       throw error;
     }
+  };
+
+  // Sesle dinleme
+  const sesiDinle = () => {
+    if (!recognition) {
+      alert("🚫 Tarayıcınız ses tanımayı desteklemiyor.");
+      return;
+    }
+
+    const r = new recognition();
+    r.lang = "tr-TR";
+    r.continuous = false;
+    r.interimResults = false;
+
+    r.start();
+    setMicActive(true);
+
+    r.onresult = async (e) => {
+      const txt = e.results[0][0].transcript;
+      setMicActive(false);
+      setMesaj(txt);
+      await gonder(txt);
+    };
+
+    r.onerror = (e) => {
+      console.error("🎤 Ses tanıma hatası:", e);
+      setMicActive(false);
+    };
+
+    r.onend = () => {
+      setMicActive(false);
+    };
   };
 
   // Mesaj gönderme & seslendirme & sipariş kaydetme
@@ -137,10 +199,13 @@ function MasaAsistani() {
     }
 
     try {
-      const res = await axios.post(`${API_BASE}/yanitla`, { text: original, masa: masaId });
+      const res = await axios.post(`${API_BASE}/yanitla`, {
+        text: original,
+        masa: masaId
+      });
       reply = res.data.reply;
     } catch (error) {
-      console.error("Yanıt alınamadı:", error);
+      console.error("❌ Yanıt alınamadı:", error);
       reply = "Üzgünüm, bir sorun oluştu. Lütfen tekrar deneyin.";
     }
 
@@ -150,13 +215,13 @@ function MasaAsistani() {
     try {
       await sesliYanıtVer(reply);
     } catch (error) {
-      console.warn("TTS fallback kullanılıyor:", error);
+      console.warn("⚠️ TTS fallback kullanılıyor:", error);
       const utt = new SpeechSynthesisUtterance(reply);
       utt.lang = "tr-TR";
       synth.speak(utt);
     }
 
-    // Sipariş işleme ve gönderme
+    // Sipariş işleme
     try {
       const sepet = urunAyikla(original);
       if (sepet.length > 0) {
@@ -172,18 +237,78 @@ function MasaAsistani() {
           siparisData,
           { headers: { "Content-Type": "application/json" } }
         );
+        console.log("✅ Sipariş kaydedildi");
 
         // Mutfağa bildir
         mutfagaBildir(siparisData);
       }
     } catch (error) {
-      console.error("Sipariş kaydetme hatası:", error);
+      console.error("❌ Sipariş kaydetme hatası:", error);
     }
 
     setLoading(false);
   };
 
-  // [Diğer fonksiyonlar aynı kalacak: urunAyikla, levenshteinDistance, sesiDinle, durdur]
+  // Ürün ayıklama
+  const urunAyikla = (msg) => {
+    const items = [];
+    const mk = msg.toLowerCase();
+    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
+    const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
+    const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
+    let m;
+
+    while ((m = pat.exec(temiz)) !== null) {
+      const adet = parseInt(m[1]) || 1;
+      const gir = m[2].trim();
+      let best = { urun: null, fiyat: 0, kategori: "", puan: 0 };
+
+      for (const u of menuUrunler) {
+        const puan = 1 - levenshteinDistance(u.ad, gir) / Math.max(u.ad.length, gir.length);
+        if (puan > best.puan) {
+          best = { ...u, puan };
+        }
+      }
+
+      if (siparisIstekli && best.urun && best.puan >= 0.75) {
+        items.push({
+          urun: best.urun,
+          adet,
+          fiyat: best.fiyat,
+          kategori: best.kategori
+        });
+      }
+    }
+
+    return items;
+  };
+
+  // Levenshtein mesafe hesaplama
+  const levenshteinDistance = (a, b) => {
+    const m = Array.from({ length: b.length + 1 }, (_, i) =>
+      Array(a.length + 1).fill(0)
+    );
+    for (let i = 0; i <= b.length; i++) m[i][0] = i;
+    for (let j = 0; j <= a.length; j++) m[0][j] = j;
+    for (let i = 1; i <= b.length; i++)
+      for (let j = 1; j <= a.length; j++) {
+        const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+        m[i][j] = Math.min(
+          m[i - 1][j] + 1,
+          m[i][j - 1] + 1,
+          m[i - 1][j - 1] + cost
+        );
+      }
+    return m[b.length][a.length];
+  };
+
+  // Konuşmayı durdur
+  const durdur = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center p-4">
@@ -198,7 +323,8 @@ function MasaAsistani() {
           value={mesaj}
           onChange={(e) => setMesaj(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !loading && !audioPlaying && gonder()}
-          placeholder="Konuş ya da yazın..."
+          onFocus={handleInputFocus}
+          placeholder={karsilamaBeklemede ? "Hoş geldiniz! Tıklayın..." : "Konuş ya da yazın..."}
           className="w-full p-3 mb-4 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white"
           disabled={loading || audioPlaying}
         />
@@ -220,7 +346,7 @@ function MasaAsistani() {
             disabled={loading || audioPlaying}
             className={`py-2 px-4 rounded-xl font-bold transition ${
               micActive ? "bg-red-500" : "bg-white/20 hover:bg-white/40"
-            }`}
+            } ${loading || audioPlaying ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             🎤 Dinle
           </button>
@@ -238,7 +364,10 @@ function MasaAsistani() {
           🛑 Konuşmayı Durdur
         </button>
 
-        <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
+        <div
+          ref={mesajKutusuRef}
+          className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+        >
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
               {g.soru && (
