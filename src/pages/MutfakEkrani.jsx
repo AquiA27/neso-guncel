@@ -5,39 +5,54 @@ const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function MutfakEkrani() {
   const [orders, setOrders] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     document.title = "Mutfak Paneli - Neso";
   }, []);
 
   useEffect(() => {
-    const fetchOrders = () => {
-      fetch(`${API_BASE}/siparisler`, {
-        headers: { Authorization: AUTH_HEADER },
-      })
-        .then((res) => res.json())
-        .then((data) => setOrders(data.orders.reverse()))
-        .catch((err) => console.error("Siparişler alınamadı", err));
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/siparisler`, {
+          headers: { Authorization: AUTH_HEADER },
+        });
+        if (!response.ok) {
+          throw new Error("Siparişler alınırken bir hata oluştu.");
+        }
+        const data = await response.json();
+        setOrders(data.orders.reverse());
+        setError(null);
+      } catch (err) {
+        console.error("Siparişler alınamadı:", err);
+        setError("Siparişler alınamadı. Lütfen daha sonra tekrar deneyin.");
+      }
     };
 
-    fetchOrders(); // ilk yüklemede al
-    const interval = setInterval(fetchOrders, 20000); // her 20 saniyede bir güncelle
-    return () => clearInterval(interval); // component unload olursa temizle
+    fetchOrders(); // İlk yüklemede siparişleri al
+    const interval = setInterval(fetchOrders, 20000); // Her 20 saniyede bir güncelle
+    return () => clearInterval(interval); // Component unload olursa temizle
   }, []);
 
   const handleHazirlaniyor = (masa) => {
-    alert(`Masa ${masa} siparişi hazırlanıyor olarak işaretlendi.`);
+    alert(`🚀 Masa ${masa} siparişi hazırlanıyor olarak işaretlendi.`);
   };
 
   const handleIptal = (masa) => {
-    alert(`Masa ${masa} siparişi iptal edildi.`);
+    alert(`❌ Masa ${masa} siparişi iptal edildi.`);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-yellow-100 to-orange-200 p-6 text-gray-800 font-sans">
       <h1 className="text-4xl font-bold text-center mb-8">👨‍🍳 Mutfak Sipariş Paneli</h1>
 
-      {orders.length === 0 ? (
+      {error && (
+        <p className="text-center text-red-500 mb-4">
+          {error}
+        </p>
+      )}
+
+      {orders.length === 0 && !error ? (
         <p className="text-center text-gray-500">Henüz sipariş yok.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -48,10 +63,17 @@ function MutfakEkrani() {
               sepet = Array.isArray(parsed) ? parsed.filter((item) => item.urun && item.adet) : [];
             } catch (e) {
               console.error("❌ Sepet verisi çözümlenemedi:", e);
-              return null; // sepet parse edilemezse bu kartı gösterme
+              return (
+                <div
+                  key={i}
+                  className="bg-red-100 border border-red-200 rounded-xl shadow-md p-5"
+                >
+                  <p className="text-red-600">Sipariş verisi çözümlenemedi.</p>
+                </div>
+              );
             }
 
-            if (sepet.length === 0) return null; // boş sepetli kartları gösterme
+            if (sepet.length === 0) return null; // Boş sepetli kartları gösterme
 
             return (
               <div

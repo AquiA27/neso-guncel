@@ -19,13 +19,17 @@ function MasaAsistani() {
 
   // Menü verisi
   useEffect(() => {
-    axios.get(`${API_BASE}/menu`)
-      .then(res => {
+    const fetchMenu = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/menu`);
         setMenuUrunler(
-          res.data.menu.flatMap(cat => cat.urunler.map(u => u.ad.toLowerCase()))
+          res.data.menu.flatMap((cat) => cat.urunler.map((u) => u.ad.toLowerCase()))
         );
-      })
-      .catch(console.error);
+      } catch (error) {
+        console.error("Menü verisi alınamadı:", error);
+      }
+    };
+    fetchMenu();
   }, []);
 
   // Başlık
@@ -40,43 +44,48 @@ function MasaAsistani() {
     }
   }, [gecmis]);
 
-  // Karşılama mesajı (mount anında)
+  // Karşılama mesajı
   useEffect(() => {
     const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    // İlk olarak Google TTS ile dene
-    sesliYanıtVer(greeting)
-      .catch(() => {
-        // Hata olursa fallback olarak yerel TTS
-        const utt = new SpeechSynthesisUtterance(greeting);
-        utt.lang = "tr-TR";
-        synth.speak(utt);
-      });
+    sesliYanıtVer(greeting).catch(() => {
+      const utt = new SpeechSynthesisUtterance(greeting);
+      utt.lang = "tr-TR";
+      synth.speak(utt);
+    });
   }, [masaId]);
 
   // Google TTS MP3 çalma
   const sesliYanıtVer = async (text) => {
-    const res = await axios.post(
-      `${API_BASE}/sesli-yanit`,
-      { text },
-      { responseType: "arraybuffer" }
-    );
-    const blob = new Blob([res.data], { type: "audio/mp3" });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audioRef.current = audio;
-    setAudioPlaying(true);
-    await audio.play();
-    audio.onended = () => setAudioPlaying(false);
+    try {
+      const res = await axios.post(
+        `${API_BASE}/sesli-yanit`,
+        { text },
+        { responseType: "arraybuffer" }
+      );
+      const blob = new Blob([res.data], { type: "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setAudioPlaying(true);
+      await audio.play();
+      audio.onended = () => setAudioPlaying(false);
+    } catch (error) {
+      console.error("Google TTS ile sesli yanıt alınamadı:", error);
+      throw error;
+    }
   };
 
   // Sesle dinleme
   const sesiDinle = () => {
-    if (!recognition) return alert("Tarayıcı ses tanımıyor.");
+    if (!recognition) {
+      alert("Tarayıcınız ses tanımayı desteklemiyor.");
+      return;
+    }
     const r = new recognition();
     r.lang = "tr-TR";
     r.start();
     setMicActive(true);
-    r.onresult = async e => {
+    r.onresult = async (e) => {
       const txt = e.results[0][0].transcript;
       setMicActive(false);
       setMesaj(txt);
@@ -85,30 +94,32 @@ function MasaAsistani() {
     r.onerror = () => setMicActive(false);
   };
 
-  // Gönderme & seslendirme & sipariş kaydetme
+  // Mesaj gönderme & seslendirme & sipariş kaydetme
   const gonder = async (txt) => {
     setLoading(true);
     const original = (txt ?? mesaj).trim();
     let reply = "";
+
     try {
-      const res = await axios.post(
-        `${API_BASE}/yanitla`,
-        { text: original, masa: masaId }
-      );
+      const res = await axios.post(`${API_BASE}/yanitla`, { text: original, masa: masaId });
       reply = res.data.reply;
-    } catch {
+    } catch (error) {
+      console.error("Yanıt alınamadı:", error);
       reply = "Üzgünüm, bir sorun oluştu. Lütfen tekrar deneyin.";
     }
-    setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
+
+    setGecmis((prev) => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
+
     try {
       await sesliYanıtVer(reply);
-    } catch (err) {
-      console.warn("TTS fallback:", err);
+    } catch (error) {
+      console.warn("TTS fallback kullanılıyor:", error);
       const utt = new SpeechSynthesisUtterance(reply);
       utt.lang = "tr-TR";
       synth.speak(utt);
     }
+
     try {
       const sepet = urunAyikla(original);
       await axios.post(
@@ -116,9 +127,10 @@ function MasaAsistani() {
         { masaId, istek: original, cevap: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
-    } catch (err) {
-      console.error("Sipariş kaydetme hatası:", err);
+    } catch (error) {
+      console.error("Sipariş kaydetme hatası:", error);
     }
+
     setLoading(false);
   };
 
@@ -130,16 +142,22 @@ function MasaAsistani() {
     const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
     const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
     let m;
+
     while ((m = pat.exec(temiz)) !== null) {
       const adet = parseInt(m[1]) || 1;
       const gir = m[2].trim();
       let best = { urun: null, puan: 0 };
+
       for (const u of menuUrunler) {
         const puan = 1 - levenshteinDistance(u, gir) / Math.max(u.length, gir.length);
         if (puan > best.puan) best = { urun: u, puan };
       }
-      if (siparisIstekli && best.urun && best.puan >= 0.75) items.push({ urun: best.urun, adet });
+
+      if (siparisIstekli && best.urun && best.puan >= 0.75) {
+        items.push({ urun: best.urun, adet });
+      }
     }
+
     return items;
   };
 
@@ -181,8 +199,8 @@ function MasaAsistani() {
         <input
           type="text"
           value={mesaj}
-          onChange={e => setMesaj(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && gonder()}
+          onChange={(e) => setMesaj(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && gonder()}
           placeholder="Konuş ya da yazın..."
           className="w-full p-3 mb-4 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white"
         />
@@ -221,13 +239,13 @@ function MasaAsistani() {
         <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
-                <div className="bg-white/20 p-2 rounded-xl text-sm">
-                  🧑‍💼 <span className="font-semibold">Siz:</span> {g.soru}
-                </div>
-                <div className="bg-white/30 p-2 rounded-xl text-sm">
-                  🤖 <span className="font-semibold">Neso:</span> {g.cevap}
-                </div>
+              <div className="bg-white/20 p-2 rounded-xl text-sm">
+                🧑‍💼 <span className="font-semibold">Siz:</span> {g.soru}
               </div>
+              <div className="bg-white/30 p-2 rounded-xl text-sm">
+                🤖 <span className="font-semibold">Neso:</span> {g.cevap}
+              </div>
+            </div>
           ))}
         </div>
 
