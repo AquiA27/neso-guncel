@@ -14,6 +14,7 @@ function MasaAsistani() {
   const [micActive, setMicActive] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [menuUrunler, setMenuUrunler] = useState([]);
+  const [karsilamaGosterildi, setKarsilamaGosterildi] = useState(false);
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
@@ -44,15 +45,18 @@ function MasaAsistani() {
     }
   }, [gecmis]);
 
-  // Karşılama mesajı
+  // Karşılama mesajı - sadece bir kez çalışacak
   useEffect(() => {
-    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    sesliYanıtVer(greeting).catch(() => {
-      const utt = new SpeechSynthesisUtterance(greeting);
-      utt.lang = "tr-TR";
-      synth.speak(utt);
-    });
-  }, [masaId]);
+    if (!karsilamaGosterildi) {
+      const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
+      sesliYanıtVer(greeting).catch(() => {
+        const utt = new SpeechSynthesisUtterance(greeting);
+        utt.lang = "tr-TR";
+        synth.speak(utt);
+      });
+      setKarsilamaGosterildi(true);
+    }
+  }, [masaId, karsilamaGosterildi]);
 
   // Google TTS MP3 çalma
   const sesliYanıtVer = async (text) => {
@@ -122,9 +126,15 @@ function MasaAsistani() {
 
     try {
       const sepet = urunAyikla(original);
+      // Sipariş formatını düzeltiyoruz
       await axios.post(
         `${API_BASE}/siparis-ekle`,
-        { masaId, istek: original, cevap: reply, sepet },
+        {
+          masa: masaId, // masaId yerine masa kullanıyoruz
+          istek: original,
+          yanit: reply, // cevap yerine yanit kullanıyoruz
+          sepet: sepet
+        },
         { headers: { "Content-Type": "application/json" } }
       );
     } catch (error) {
