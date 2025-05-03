@@ -29,7 +29,7 @@ function MasaAsistani() {
       .catch(console.error);
   }, []);
 
-  // Başlık
+  // Sayfa başlığı
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
@@ -40,6 +40,19 @@ function MasaAsistani() {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
+
+  // Kullanıcı ilk tıklamada karşılama
+  useEffect(() => {
+    const handleFirstClick = () => {
+      if (!greeted) {
+        speakGreeting();
+        setGreeted(true);
+      }
+      document.removeEventListener("click", handleFirstClick);
+    };
+    document.addEventListener("click", handleFirstClick);
+    return () => document.removeEventListener("click", handleFirstClick);
+  }, [greeted]);
 
   // Google TTS kullanarak karşılama
   const speakGreeting = () => {
@@ -176,7 +189,6 @@ function MasaAsistani() {
           type="text"
           value={mesaj}
           onChange={e => setMesaj(e.target.value)}
-          onFocus={() => { if (!greeted) { speakGreeting(); setGreeted(true); } }}
           onKeyDown={e => e.key === "Enter" && gonder()}
           placeholder="Konuş ya da yazın..."
           className="w-full p-3 mb-4 rounded-xl bg-white/20 placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white"
@@ -216,13 +228,13 @@ function MasaAsistani() {
         <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
-              <div className="bg-white/20 p-2 rounded-xl text-sm">
-                🧑‍💼 <span className="font-semibold">Siz:</span> {g.soru}
+                <div className="bg-white/20 p-2 rounded-xl text-sm">
+                  🧑‍💼 <span className="font-semibold">Siz:</span> {g.soru}
+                </div>
+                <div className="bg-white/30 p-2 rounded-xl text-sm">
+                  🤖 <span className="font-semibold">Neso:</span> {g.cevap}
+                </div>
               </div>
-              <div className="bg-white/30 p-2 rounded-xl text-sm">
-                🤖 <span className="font-semibold">Neso:</span> {g.cevap}
-              </div>
-            </div>
           ))}
         </div>
 
