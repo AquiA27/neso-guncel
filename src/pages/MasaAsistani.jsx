@@ -14,7 +14,7 @@ function MasaAsistani() {
   const [micActive, setMicActive] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [menuUrunler, setMenuUrunler] = useState([]);
-  const [greeted, setGreeted] = useState(false);  // karşılama kontrolü
+  const [greeted, setGreeted] = useState(false);
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
 
@@ -29,29 +29,25 @@ function MasaAsistani() {
       .catch(console.error);
   }, []);
 
-  // Sayfa başlığı
+  // Başlık
   useEffect(() => {
     document.title = `Neso Asistan - Masa ${masaId}`;
   }, [masaId]);
 
-  // Otomatik scroll
+  // Scroll
   useEffect(() => {
     if (mesajKutusuRef.current) {
       mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
     }
   }, [gecmis]);
 
-  // Karşılama mesajını oynatma (kullanıcı input focus ile)
+  // Google TTS kullanarak karşılama
   const speakGreeting = () => {
     const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    const utt = new SpeechSynthesisUtterance(greeting);
-    utt.lang = "tr-TR";
-    utt.rate = 1.3;
-    utt.pitch = 1.0;
-    synth.speak(utt);
+    sesliYanıtVer(greeting);
   };
 
-  // Google TTS MP3 çalma (kullanıcı etkileşimi sonrası)
+  // Google TTS MP3 çalma
   const sesliYanıtVer = async (text) => {
     try {
       const res = await axios.post(
@@ -90,7 +86,7 @@ function MasaAsistani() {
     r.onerror = () => setMicActive(false);
   };
 
-  // Mesaj gönderme & seslendirme & sipariş kaydetme
+  // Gönderme & seslendirme & sipariş kaydetme
   const gonder = async (txt) => {
     setLoading(true);
     const original = (txt ?? mesaj).trim();
@@ -120,7 +116,7 @@ function MasaAsistani() {
     setLoading(false);
   };
 
-  // Ürün ayıklama fonksiyonu
+  // Ürün ayıklama
   const urunAyikla = (msg) => {
     const items = [];
     const mk = msg.toLowerCase();
