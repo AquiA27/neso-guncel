@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 
-const synth = window.speechSynthesis;
-const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const API_BASE = process.env.REACT_APP_API_BASE;
 
 function MasaAsistani() {
   const { masaId } = useParams();
@@ -13,51 +12,12 @@ function MasaAsistani() {
   const [micActive, setMicActive] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [menuUrunler, setMenuUrunler] = useState([]);
+  const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
-
-  // 🎙️ Tarayıcı TTS konuşma fonksiyonu
-  const speak = (text, onEnd) => {
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = "tr-TR";
-    utt.rate = 1.3;
-    utt.pitch = 1.0;
-    utt.onstart = () => setAudioPlaying(true);
-    utt.onend = () => {
-      setAudioPlaying(false);
-      if (onEnd) onEnd();
-    };
-    synth.speak(utt);
-  };
-
-  // 🚀 Bileşen mount olduğunda karşılama ve otomatik dinleme
-  useEffect(() => {
-    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-    if (synth.getVoices().length === 0) {
-      synth.onvoiceschanged = () => {
-        synth.onvoiceschanged = null;
-        speak(greeting, sesiDinle);
-      };
-    } else {
-      speak(greeting, sesiDinle);
-    }
-  }, [masaId]);
-
-  // 🏷️ Sayfa başlığını güncelle
-  useEffect(() => {
-    document.title = `Neso Asistan - Masa ${masaId}`;
-  }, [masaId]);
-
-  // 🔄 Geçmiş güncellendiğinde scroll
-  useEffect(() => {
-    if (mesajKutusuRef.current) {
-      mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
-    }
-  }, [gecmis]);
 
   // 📥 Menü verisini al
   useEffect(() => {
-    axios
-      .get(`${process.env.REACT_APP_API_BASE}/menu`)
+    axios.get(`${API_BASE}/menu`)
       .then(res => {
         const urunler = res.data.menu.flatMap(cat =>
           cat.urunler.map(u => u.ad.toLowerCase())
@@ -66,6 +26,24 @@ function MasaAsistani() {
       })
       .catch(err => console.error("Menü alınamadı:", err));
   }, []);
+
+  // 🏷️ Başlık güncelle
+  useEffect(() => {
+    document.title = `Neso Asistan - Masa ${masaId}`;
+  }, [masaId]);
+
+  // 🔄 Otomatik scroll
+  useEffect(() => {
+    if (mesajKutusuRef.current) {
+      mesajKutusuRef.current.scrollTop = mesajKutusuRef.current.scrollHeight;
+    }
+  }, [gecmis]);
+
+  // 🚀 Karşılama
+  useEffect(() => {
+    const greeting = `Merhaba, ben Neso, Fıstık Kafe sipariş asistanınız. ${masaId} numaralı masaya hoş geldiniz. Size nasıl yardımcı olabilirim?`;
+    sesliYanıtVer(greeting, sesiDinle);
+  }, [masaId]);
 
   // 🔢 Levenshtein mesafe hesaplama
   const levenshteinDistance = (a, b) => {
@@ -87,11 +65,11 @@ function MasaAsistani() {
     return m[b.length][a.length];
   };
 
-  // 🍽️ Mesajdan ürün ve adet ayıkla
+  // 🍽️ Mesajdan ürün ayıkla
   const urunAyikla = msg => {
     const items = [];
     const mk = msg.toLowerCase();
-    const siparisIstekli = /(ver|getir|istiyorum|isterim|sipariş)/i.test(mk);
+    const siparisIstekli = /(ver|getir|istiyorum|isterim|alabilir miyim|sipariş)/i.test(mk);
     const temiz = mk.replace(/(\d+)([a-zçğıöşü]+)/gi, "$1 $2");
     const pat = /(?:(\d+)\s*)?([a-zçğıöşü\s]+)/gi;
     let m;
@@ -110,12 +88,37 @@ function MasaAsistani() {
     return items;
   };
 
-  // 🎤 Sesli dinleme
-  const sesiDinle = () => {
-    if (!recognition) {
-      alert("Tarayıcınız ses tanımıyor.");
-      return;
+  // 🎧 Google TTS endpoint’inden MP3 alıp oynat
+  const sesliYanıtVer = async (text, onEnd) => {
+    try {
+      const res = await axios.post(
+        `${API_BASE}/sesli-yanit`,
+        { text },
+        { responseType: "arraybuffer" }
+      );
+      const blob = new Blob([res.data], { type: "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setAudioPlaying(true);
+      audio.onended = () => {
+        setAudioPlaying(false);
+        if (onEnd) onEnd();
+      };
+      audio.play();
+    } catch (err) {
+      console.error("🎧 Google TTS hatası:", err);
+      // fallback yerelde konuş
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = "tr-TR";
+      utt.onend = () => { if (onEnd) onEnd(); };
+      window.speechSynthesis.speak(utt);
     }
+  };
+
+  // 🎤 Sesle dinleme
+  const sesiDinle = () => {
+    if (!recognition) return alert("Tarayıcı ses tanımıyor.");
     const r = new recognition();
     r.lang = "tr-TR";
     r.start();
@@ -124,48 +127,40 @@ function MasaAsistani() {
       const txt = e.results[0][0].transcript;
       setMicActive(false);
       setMesaj(txt);
-      await gonder();
+      await gonder(txt);
     };
     r.onerror = () => setMicActive(false);
-    r.onend = () => {};
   };
 
-  // 📤 Gönder, seslendir ve sipariş kaydet
-  const gonder = async () => {
-    if (!mesaj.trim()) return;
+  // 📤 Gönder, seslendir ve mutfak/admin’e kaydet
+  const gonder = async (txt) => {
     setLoading(true);
-
-    const original = mesaj.trim();
+    const original = txt || mesaj.trim();
     let reply = "";
 
-    // BOT yanıtını al
     try {
       const res = await axios.post(
-        `${process.env.REACT_APP_API_BASE}/yanitla`,
+        `${API_BASE}/yanitla`,
         { text: original, masa: masaId }
       );
-      reply = res.data.reply || "Üzgünüm, cevap alınamadı.";
+      reply = res.data.reply;
     } catch (err) {
       console.error("Yanıt hatası:", err);
       reply = "Üzgünüm, bir sorun oluştu. Lütfen tekrar deneyin.";
     }
 
-    // Geçmişe ekle
     setGecmis(prev => [...prev, { soru: original, cevap: reply }]);
     setMesaj("");
+    sesliYanıtVer(reply, sesiDinle);
 
-    // Seslendir ve tekrar dinle
-    speak(reply, sesiDinle);
-
-    // Mutfak ve admin paneli için siparişi kaydet
     try {
       const sepet = urunAyikla(original);
       await axios.post(
-        `${process.env.REACT_APP_API_BASE}/siparis-ekle`,
+        `${API_BASE}/siparis-ekle`,
         { masa: masaId, istek: original, yanit: reply, sepet },
         { headers: { "Content-Type": "application/json" } }
       );
-      console.log("✅ Sipariş mutfak & admin paneline gönderildi");
+      console.log("✅ Sipariş mutfak & admin paneline gitti");
     } catch (err) {
       console.error("Sipariş kaydetme hatası:", err);
     }
@@ -173,18 +168,18 @@ function MasaAsistani() {
     setLoading(false);
   };
 
-  // ⏹️ Konuşmayı durdur
+  // ⏹️ Durdur
   const durdur = () => {
-    synth.cancel();
-    setAudioPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-md shadow-2xl rounded-3xl p-6 w-full max-w-md text-white border border-white/30">
-        <h1 className="text-3xl font-extrabold text-center mb-4">
-          🎙️ Neso Asistan
-        </h1>
+        <h1 className="text-3xl font-extrabold text-center mb-4">🎙️ Neso Asistan</h1>
         <p className="text-center mb-6 opacity-80">
           Masa No: <span className="font-semibold">{masaId}</span>
         </p>
@@ -200,7 +195,7 @@ function MasaAsistani() {
 
         <div className="flex gap-3 mb-4">
           <button
-            onClick={gonder}
+            onClick={() => gonder()}
             disabled={loading || audioPlaying}
             className="flex-1 bg-white/20 hover:bg-white/40 py-2 rounded-xl font-bold transition"
           >
@@ -229,10 +224,7 @@ function MasaAsistani() {
           🛑 Konuşmayı Durdur
         </button>
 
-        <div
-          ref={mesajKutusuRef}
-          className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl"
-        >
+        <div ref={mesajKutusuRef} className="max-h-64 overflow-y-auto space-y-4 bg-white/10 p-3 rounded-xl">
           {gecmis.map((g, i) => (
             <div key={i} className="space-y-1">
               <div className="bg-white/20 p-2 rounded-xl text-sm">
