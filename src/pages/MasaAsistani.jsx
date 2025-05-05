@@ -280,16 +280,6 @@ function MasaAsistani() {
         );
         console.log("✅ Sipariş kaydedildi");
 
-        // Mutfağa bildir
-        mutfagaBildir(siparisData);
-      }
-    } catch (error) {
-      console.error("❌ Sipariş kaydetme hatası:", error);
-    }
-
-    setLoading(false);
-  };
-
   // Ürün ayıklama
   const urunAyikla = (msg) => {
     const items = [];
