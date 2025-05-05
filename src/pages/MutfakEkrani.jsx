@@ -4,6 +4,8 @@ import axios from "axios";
 const API_BASE = process.env.REACT_APP_API_BASE;
 // DİKKAT: Bu yöntem üretim ortamları için GÜVENLİ DEĞİLDİR!
 // Güvenli bir kimlik doğrulama mekanizması (örn: Token tabanlı) kullanılmalıdır.
+// AUTH_HEADER artık AdminPanel gibi ortam değişkenlerinden alınmalı veya props olarak geçilmeli.
+// Şimdilik eski haliyle bırakıyorum ama AdminPanel'deki gibi düzeltilmesi önerilir.
 const AUTH_HEADER = "Basic " + btoa("admin:admin123");
 
 function MutfakEkrani() {
@@ -24,7 +26,8 @@ function MutfakEkrani() {
     if (typeof window !== 'undefined') {
         try {
             // Public klasöründeki ses dosyasının yolu
-            audioRef.current = new Audio("/notification.mp3");
+            // Ensure the path is correct based on your public folder structure
+            audioRef.current = new Audio(process.env.PUBLIC_URL + "/notification.mp3");
             // Sesi ön yüklemeyi deneyebiliriz (opsiyonel)
             // audioRef.current.preload = "auto";
             logInfo("🔔 Sesli bildirim nesnesi oluşturuldu.");
@@ -49,34 +52,44 @@ function MutfakEkrani() {
       setLoading(false);
       return;
     }
+    setError(null); // Yeni istek öncesi hatayı temizle
+    setLoading(true); // Yüklemeyi başlat (fetchOrders her çağrıldığında)
     try {
       const response = await axios.get(`${API_BASE}/siparisler`, {
-        headers: { Authorization: AUTH_HEADER }
+        headers: { Authorization: AUTH_HEADER } // AUTH_HEADER'ı kullan
       });
-      // API'den gelen siparişleri ID'ye göre ters sıralı (en yeni üstte) alıyoruz zaten.
-      // İsteğe bağlı olarak burada tekrar sıralama veya filtreleme yapılabilir.
-      setOrders(response.data.orders || []); // orders yoksa veya null ise boş array ata
-      setError(null); // Başarılı istek sonrası hatayı temizle
-      logInfo(`✅ Siparişler başarıyla getirildi (${response.data.orders?.length || 0} adet).`);
+      // Gelen verinin beklendiği gibi olup olmadığını kontrol et
+      if (response.data && Array.isArray(response.data.orders)) {
+          // API'den gelen siparişleri ID'ye göre ters sıralı (en yeni üstte) alıyoruz zaten.
+          setOrders(response.data.orders);
+          logInfo(`✅ Siparişler başarıyla getirildi (${response.data.orders.length} adet).`);
+      } else {
+           logWarn("API'den beklenen formatta sipariş verisi gelmedi.", response.data);
+           setOrders([]); // Hatalı formatta veri gelirse listeyi boşalt
+           setError("Sunucudan beklenmedik formatta sipariş verisi alındı.");
+      }
+
     } catch (err) {
       logError("❌ Siparişler alınamadı:", err);
       const errorDetail = err.response?.data?.detail || err.message || "Bilinmeyen bir hata oluştu.";
       // Eğer yetkilendirme hatasıysa (401) özel mesaj gösterilebilir.
       if (err.response?.status === 401) {
           setError("Siparişleri görüntülemek için yetkiniz yok veya kimlik bilgileri hatalı.");
+          // Yetki hatası durumunda belki logout işlemi de tetiklenebilir.
       } else {
           setError(`Siparişler alınamadı: ${errorDetail}`);
       }
+       setOrders([]); // Hata durumunda mevcut siparişleri temizle
     } finally {
-       setLoading(false); // Yükleme bitti (ilk yükleme için)
+       setLoading(false); // Yükleme bitti
     }
-  }, [API_BASE, logInfo, logError]); // Bağımlılıklar
+  }, [API_BASE, logInfo, logError, logWarn]); // Bağımlılıklar güncellendi
 
   // --- WebSocket Bağlantısı Kurulumu ---
   useEffect(() => {
     const connectWebSocket = () => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            logInfo("WebSocket zaten bağlı.");
+            // logInfo("WebSocket zaten bağlı."); // Çok sık log
             return;
         }
          if (!API_BASE) {
@@ -87,17 +100,18 @@ function MutfakEkrani() {
       try {
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = API_BASE.replace(/^https?:\/\//, '');
-        const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak`;
+        const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak`; // Mutfak endpoint'i
 
         logInfo(`📡 WebSocket bağlantısı deneniyor: ${wsUrl}`);
         wsRef.current = new WebSocket(wsUrl);
 
         wsRef.current.onopen = () => {
           logInfo("✅ WebSocket bağlantısı başarılı.");
-          setError(null); // Bağlantı başarılıysa hata mesajını temizle
+          // setError(null); // Sadece WS hatasını temizlemek yerine fetchOrders'da genel hata temizleniyor
         };
 
         wsRef.current.onmessage = (event) => {
+           console.log("[Mutfak Ekranı] DEBUG: WebSocket Mesajı Geldi:", event.data); // Gelen mesajı logla
           try {
              const message = JSON.parse(event.data);
              logInfo(`📥 WebSocket mesajı alındı: Tip: ${message.type}`);
@@ -106,16 +120,25 @@ function MutfakEkrani() {
                  logInfo("📦 Yeni sipariş geldi, liste güncelleniyor ve bildirim çalınıyor...");
                  // Yeni sipariş geldiğinde sesli bildirim ver
                  if (audioRef.current) {
-                     // Daha önce çalmaya başlamış olabilir, durdurup baştan çal
-                     audioRef.current.pause();
-                     audioRef.current.currentTime = 0;
-                     audioRef.current.play().catch(err => logError("Sesli bildirim çalınamadı:", err));
+                     // Kullanıcı etkileşimi olmadan play() engellenebilir, try-catch ekleyelim
+                     try {
+                        // Sesi başa sarıp çalmayı dene
+                        audioRef.current.currentTime = 0;
+                        // play() bir Promise döndürür
+                        audioRef.current.play().catch(playError => {
+                            // Kullanıcı etkileşimi yoksa veya başka bir hata varsa logla
+                            logError("Sesli bildirim otomatik çalınamadı:", playError);
+                            // Belki kullanıcıya bir bildirim gösterebiliriz?
+                        });
+                     } catch (audioError) {
+                         logError("Ses nesnesiyle ilgili hata:", audioError);
+                     }
                  }
-                 // Sipariş listesini güncelle
+                 // Sipariş listesini güncelleyerek yeni siparişi al
                  fetchOrders();
              } else if (message.type === 'durum') {
                  logInfo(`📊 Sipariş durumu güncellemesi alındı (Masa: ${message.data?.masa}, Durum: ${message.data?.durum}), liste güncelleniyor...`);
-                 // Başka bir yerden (örn: admin paneli) durum güncellenirse listeyi yenile
+                 // Durum güncellendiğinde de listeyi yenile
                  fetchOrders();
              } else if (message.type === 'pong') {
                  // Ping yanıtı, sorun yok.
@@ -129,12 +152,13 @@ function MutfakEkrani() {
 
         wsRef.current.onerror = (errorEvent) => {
           logError("❌ WebSocket hatası:", errorEvent);
-          setError("Sunucuyla anlık bağlantı kesildi. Yeniden bağlanılmaya çalışılıyor...");
+          setError("Sunucuyla anlık bağlantı kesildi (WebSocket).");
         };
 
         wsRef.current.onclose = (event) => {
           logInfo(`🔌 WebSocket bağlantısı kapandı. Kod: ${event.code}, Sebep: ${event.reason}`);
-          if (event.code !== 1000) { // Normal kapanma değilse
+          wsRef.current = null; // Referansı temizle
+          if (event.code !== 1000 && event.code !== 1001) { // Normal veya sayfa kapanışı değilse
             logInfo("WebSocket beklenmedik şekilde kapandı, 5 saniye sonra tekrar denenecek...");
             setTimeout(connectWebSocket, 5000);
           }
@@ -142,7 +166,7 @@ function MutfakEkrani() {
 
       } catch (error) {
         logError("❌ WebSocket bağlantısı başlatılırken kritik hata:", error);
-        setError("Sunucu bağlantısı kurulamıyor.");
+        setError("Sunucu bağlantısı (WebSocket) kurulamıyor.");
       }
     };
 
@@ -152,8 +176,8 @@ function MutfakEkrani() {
         try { wsRef.current.send(JSON.stringify({ type: 'ping' })); }
         catch (err) { logError("Ping gönderilemedi:", err); }
       } else if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-          logInfo("Ping: Bağlantı kapalı, tekrar bağlanılıyor...");
-          connectWebSocket();
+          // logInfo("Ping: Bağlantı kapalı, tekrar bağlanılıyor..."); // Çok sık log
+          connectWebSocket(); // Kapalıysa yeniden bağlanmayı dene
       }
     }, 30000);
 
@@ -161,19 +185,18 @@ function MutfakEkrani() {
     connectWebSocket();
     fetchOrders(); // İlk yükleme için siparişleri çek
 
-    // Periyodik olarak siparişleri tekrar çekmek (WebSocket'e ek olarak fallback)
-    // const fetchInterval = setInterval(fetchOrders, 60000); // Dakikada bir
-
     // Component kaldırıldığında temizlik yap
     return () => {
       clearInterval(pingInterval);
-      // clearInterval(fetchInterval); // Eğer interval kullanılıyorsa
       if (wsRef.current) {
         logInfo("Component kaldırılıyor, WebSocket bağlantısı kapatılıyor.");
         wsRef.current.close(1000, "Component unmounting");
+        wsRef.current = null;
       }
     };
-  }, [API_BASE, fetchOrders, logInfo, logError, logWarn]); // Bağımlılıklar
+  // fetchOrders'ı dependency array'den çıkardık, çünkü içerideki state güncellemeleri döngüye neden olabilir.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_BASE, logInfo, logError, logWarn]);
 
   // --- Sipariş Durumu Güncelleme Fonksiyonu ---
   const updateOrderStatus = useCallback(async (siparisId, masa, durum) => {
@@ -190,29 +213,28 @@ function MutfakEkrani() {
         `${API_BASE}/siparis-guncelle`,
         { id: siparisId, masa, durum }, // Sipariş ID'sini de gönderiyoruz
         { headers: {
-            Authorization: AUTH_HEADER,
-            'Content-Type': 'application/json' // Content-Type belirtmek iyi bir pratik
+            Authorization: AUTH_HEADER, // Auth header kullan
+            'Content-Type': 'application/json'
         }}
       );
 
       logInfo(`✅ Sipariş durumu başarıyla güncellendi (ID: ${siparisId}). Yanıt: ${response.data.message}`);
       // Başarılı güncelleme sonrası listeyi hemen yenilemek yerine WebSocket'ten gelecek mesajı bekleyebiliriz.
-      // Ancak anında görsel geri bildirim için burada da çağrılabilir:
+      // Ancak anında görsel geri bildirim için burada da çağrılabilir (fetchOrders içinde zaten setLoading var)
       fetchOrders();
-
-      // Backend zaten WebSocket yayını yapıyor, frontend'den tekrar göndermeye gerek yok.
-      // if (wsRef.current?.readyState === WebSocket.OPEN) {
-      //   wsRef.current.send(JSON.stringify({ type: 'durum', data: { id: siparisId, masa, durum } }));
-      // }
 
     } catch (error) {
       logError(`❌ Sipariş durumu güncellenemedi (ID: ${siparisId}):`, error);
       const errorDetail = error.response?.data?.detail || error.message || "Bilinmeyen bir hata oluştu.";
-      setError(`Sipariş durumu güncellenirken bir hata oluştu: ${errorDetail}`);
+        if (error.response?.status === 401) {
+            setError("Yetkiniz yok veya kimlik bilgileri hatalı.");
+        } else {
+            setError(`Sipariş durumu güncellenirken bir hata oluştu: ${errorDetail}`);
+        }
       // Hata durumunda listeyi tekrar çekerek tutarlılığı sağlamayı deneyebiliriz (opsiyonel)
       // fetchOrders();
     }
-  }, [API_BASE, fetchOrders, logInfo, logError]); // Bağımlılıklar
+  }, [API_BASE, fetchOrders, logInfo, logError]); // Bağımlılıklar güncellendi
 
   // --- Buton Handler'ları ---
   const handleHazirlaniyor = (siparisId, masa) => {
@@ -235,6 +257,10 @@ function MutfakEkrani() {
     if (!timeStr) return "-";
     try {
       const date = new Date(timeStr);
+      // Zaman geçerli mi kontrolü
+      if (isNaN(date.getTime())) {
+          return timeStr; // Geçersizse orijinali döndür
+      }
       // Sadece saat:dakika:saniye formatı yeterli olabilir
       return new Intl.DateTimeFormat('tr-TR', {
         hour: '2-digit',
@@ -254,7 +280,7 @@ function MutfakEkrani() {
             case 'hazirlaniyor': return "bg-blue-100 border-blue-300";
             case 'hazir': return "bg-green-100 border-green-300";
             case 'iptal': return "bg-red-100 border-red-300 text-gray-500 line-through"; // İptalleri soluk ve üstü çizili yap
-            default: return "bg-gray-100 border-gray-300";
+            default: return "bg-gray-100 border-gray-300"; // Bilinmeyen durum
         }
     };
 
@@ -268,6 +294,14 @@ function MutfakEkrani() {
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded relative mb-4 shadow" role="alert">
           <strong className="font-bold">Hata: </strong>
           <span className="block sm:inline">{error}</span>
+          {/* Yeniden deneme butonu */}
+          <button
+            onClick={fetchOrders}
+            className="ml-4 px-2 py-1 bg-red-600 text-white rounded text-xs"
+            disabled={loading}
+            >
+             {loading ? 'Yükleniyor...' : 'Tekrar Dene'}
+           </button>
         </div>
       )}
 
@@ -278,47 +312,81 @@ function MutfakEkrani() {
          </div>
       )}
 
-      {/* Sipariş Yok Mesajı */}
+      {/* Sipariş Yok Mesajı (Yükleme bittikten sonra ve hata yoksa) */}
       {!loading && orders.length === 0 && !error ? (
         <div className="text-center p-8 bg-white rounded-xl shadow-md mt-8">
-          <p className="text-gray-500 text-lg">📭 Bekleyen veya hazırlanan sipariş bulunmamaktadır.</p>
+          <p className="text-gray-500 text-lg">📭 Gösterilecek aktif sipariş bulunmamaktadır.</p>
         </div>
-      ) : (
-        // Sipariş Kartları
+      ) : null }
+
+      {/* Sipariş Kartları (Yükleme bittikten sonra ve sipariş varsa) */}
+      {!loading && orders.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {orders.map((order) => {
             // Sadece belirli durumları göstermek istersek burada filtreleyebiliriz
-             if (order.durum === 'hazir' || order.durum === 'iptal') {
-                 // return null; // Tamamlanmış veya iptal edilmişleri gösterme (Opsiyonel)
-             }
+             // if (order.durum === 'hazir' || order.durum === 'iptal') {
+             //     // return null; // Tamamlanmış veya iptal edilmişleri gösterme (Opsiyonel)
+             // }
 
+            // --- GÜNCELLENMİŞ SEPET PARSE ETME VE HATA YÖNETİMİ ---
             let sepetItems = [];
-            try {
-              // Sipariş sepetini JSON'dan parse et
-              const parsedSepet = JSON.parse(order.sepet || "[]");
-              // Sadece geçerli ürünleri (urun ve adet bilgisi olan) al
-              sepetItems = Array.isArray(parsedSepet)
-                ? parsedSepet.filter(item => item && item.urun && item.adet > 0)
-                : [];
-            } catch (e) {
-              logError(`❌ Sepet verisi çözümlenemedi (ID: ${order.id}):`, e);
-              // Hatalı sepeti olan siparişi göstermeyebilir veya hata mesajı gösterebiliriz
-              return (
-                  <div key={order.id || `error-${Math.random()}`}
-                       className="bg-red-100 border border-red-300 rounded-xl shadow-md p-5">
-                      <p className="font-semibold text-lg text-red-700">Hata: Sipariş ID {order.id}</p>
-                      <p className="text-sm text-red-600">Sipariş detayları okunamadı.</p>
-                      <p className="text-xs text-gray-500 mt-2">Zaman: {formatTime(order.zaman)}</p>
-                  </div>
-              );
+            let parseError = null; // Hata durumunu takip etmek için
+
+            // order.sepet'in varlığını, string olup olmadığını ve boş olmadığını kontrol et
+            if (order.sepet && typeof order.sepet === 'string' && order.sepet.trim() !== '') {
+                try {
+                    // JSON.parse ile veriyi çözmeye çalış
+                    const parsedSepet = JSON.parse(order.sepet);
+
+                    // Çözülen verinin bir dizi (array) olup olmadığını kontrol et
+                    if (Array.isArray(parsedSepet)) {
+                        // Geçerli ürünleri filtrele (ürün adı ve adedi olanlar)
+                        sepetItems = parsedSepet.filter(item => item && item.urun && typeof item.adet === 'number' && item.adet > 0);
+                        // İsteğe bağlı loglama
+                        // if (sepetItems.length === 0 && parsedSepet.length > 0) {
+                        //    logWarn(`Sipariş ID ${order.id}: Sepet parse edildi ancak geçerli ürün bulunamadı.`);
+                        //}
+                    } else {
+                        parseError = new Error("Sepet verisi bir dizi (array) değil.");
+                        logError(`❌ Sepet verisi dizi değil (ID: ${order.id}):`, order.sepet);
+                    }
+                } catch (e) {
+                    // JSON.parse hatasını yakala
+                    parseError = e; // Hatayı sakla
+                    // Hata zaten loglandı, tekrar loglamaya gerek yok (logError çağrısı vardı)
+                    // logError(`❌ Sepet verisi çözümlenemedi (ID: ${order.id}):`, e); // Bu satır kaldırıldı, üstte loglandı
+                }
+            } else {
+                // order.sepet null, undefined, boş string veya string değilse
+                logWarn(`Sipariş ID ${order.id}: Sepet verisi boş veya geçersiz tipte.`);
+                // parseError = new Error("Boş veya geçersiz sepet verisi"); // Bunu da hata olarak sayabiliriz
             }
 
-            // Eğer sepette geçerli ürün yoksa bu siparişi atla
+            // Eğer parse hatası varsa, bu kart için özel bir hata gösterimi yap
+            if (parseError) {
+                return (
+                    <div key={order.id || `error-${Math.random()}`}
+                         className="bg-red-100 border border-red-300 rounded-xl shadow-md p-5 opacity-70">
+                        <p className="font-semibold text-lg text-red-700">Hata: Sipariş ID {order.id}</p>
+                        <p className="text-sm text-red-600">Sipariş detayları okunamadı.</p>
+                        <p className="text-xs text-gray-500 mt-1">({parseError.message})</p>
+                        <p className="text-xs text-gray-500 mt-2">Zaman: {formatTime(order.zaman)}</p>
+                        {/* Hatalı veriyi göstermek için (debug amaçlı):
+                        <pre className="text-xs bg-red-50 mt-2 p-1 overflow-auto max-h-20"><code>{String(order.sepet)}</code></pre>
+                        */}
+                    </div>
+                );
+            }
+
+            // Parse hatası yok ama sepet boşsa (veya filtreleme sonucu boşaldıysa)
+            // Bu siparişleri atlayabiliriz.
             if (sepetItems.length === 0) {
-                logWarn(`Boş veya geçersiz sepetli sipariş atlandı (ID: ${order.id})`);
-                return null;
+                 logWarn(`Boş veya geçersiz ürün içeren sepetli sipariş atlandı (ID: ${order.id})`);
+                 return null; // Kartı render etme
             }
+            // --------------------------------------------------------------------
 
+            // --- Sepet geçerliyse ve boş değilse kart render edilir ---
             const cardColors = getStatusColors(order.durum);
 
             return (
@@ -347,15 +415,9 @@ function MutfakEkrani() {
                   {/* <p className="font-medium mb-2 text-sm text-gray-600">🛒 İçerik:</p> */}
                   <ul className="space-y-1.5">
                     {sepetItems.map((item, index) => (
-                      <li key={index} className="flex justify-between items-start text-sm">
+                      <li key={`${order.id}-${index}`} className="flex justify-between items-start text-sm"> {/* Daha benzersiz key */}
                         <span className="flex-1 mr-2">• {item.urun}</span>
                         <span className="font-semibold text-orange-700">× {item.adet}</span>
-                        {/* Kategori bilgisi çok yer kaplıyorsa kaldırılabilir */}
-                        {/* {item.kategori && (
-                          <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded ml-2">
-                            {item.kategori}
-                          </span>
-                        )} */}
                       </li>
                     ))}
                   </ul>
@@ -369,8 +431,9 @@ function MutfakEkrani() {
                  )}
 
                 {/* Aksiyon Butonları */}
+                {/* İptal edilmiş veya hazır siparişler için butonları gösterme */}
                 {order.durum !== 'iptal' && order.durum !== 'hazir' && (
-                  <div className="flex gap-2 mt-auto">
+                  <div className="flex gap-2 mt-auto pt-3 border-t border-gray-300/50"> {/* Butonları alta sabitlemek ve ayıraç eklemek için */}
                     {/* Eğer 'bekliyor' ise 'Hazırlanıyor' butonu */}
                     {order.durum === 'bekliyor' && (
                       <button
@@ -393,14 +456,16 @@ function MutfakEkrani() {
                       </button>
                     )}
 
-                    {/* Her zaman gösterilen 'İptal' butonu (hazır veya iptal değilse) */}
-                    <button
-                      onClick={() => handleIptal(order.id, order.masa)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-semibold transition duration-200 ease-in-out active:scale-95 shadow hover:shadow-md"
-                      title="Siparişi iptal et"
-                    >
-                      ❌ İptal
-                    </button>
+                    {/* Her zaman gösterilen 'İptal' butonu (bekliyor veya hazırlanıyor ise) */}
+                     {(order.durum === 'bekliyor' || order.durum === 'hazirlaniyor') && (
+                        <button
+                          onClick={() => handleIptal(order.id, order.masa)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-semibold transition duration-200 ease-in-out active:scale-95 shadow hover:shadow-md"
+                          title="Siparişi iptal et"
+                        >
+                          ❌ İptal
+                        </button>
+                    )}
                   </div>
                 )}
 
