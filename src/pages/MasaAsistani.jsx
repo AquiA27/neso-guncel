@@ -34,12 +34,14 @@ function MasaAsistani() {
    * İki string arasındaki Levenshtein mesafesini hesaplar.
    * Bu, iki stringin ne kadar farklı olduğunu ölçer (kaç ekleme/silme/değiştirme gerekli).
    */
-  const levenshteinDistance = (a = '', b = '') => {
+  const levenshteinDistance = (a = '', b = '') => { // Varsayılan değerler eklendi
     if (a.length === 0) return b.length;
     if (b.length === 0) return a.length;
+    // Matris oluşturma
     const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
     for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
     for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+    // Mesafeyi hesaplama
     for (let i = 1; i <= a.length; i++) {
       for (let j = 1; j <= b.length; j++) {
         const cost = a[i - 1] === b[j - 1] ? 0 : 1;
@@ -53,7 +55,7 @@ function MasaAsistani() {
    * Levenshtein mesafesini kullanarak 0 ile 1 arasında bir benzerlik skoru hesaplar.
    * Skor 1'e yaklaştıkça stringler daha benzerdir.
    */
-  const calculateSimilarity = (str1 = '', str2 = '') => {
+  const calculateSimilarity = (str1 = '', str2 = '') => { // Varsayılan değerler eklendi
     const distance = levenshteinDistance(str1, str2);
     const maxLength = Math.max(str1.length, str2.length);
     if (maxLength === 0) return 1; // İkisi de boşsa %100 benzer
@@ -298,7 +300,7 @@ function MasaAsistani() {
       if (synth && text) {
         logWarn("⚠️ Fallback TTS (tarayıcı) kullanılıyor.");
         try { const utt = new SpeechSynthesisUtterance(text); utt.lang = "tr-TR"; synth.speak(utt); }
-        catch (ttsError){ logError("Fallback TTS hatası:", ttsError); }
+        catch(ttsError){ logError("Fallback TTS hatası:", ttsError); }
       } else {
         // Fallback de yoksa veya başarısızsa hatayı yukarıya bildir
         throw error;
@@ -608,7 +610,7 @@ function MasaAsistani() {
           🛑 Konuşmayı Durdur
         </button>
 
-         {/* Sohbet Geçmişi (ORİJİNAL JSX YAPISI - Hata kaynağı burasıysa dikkat!) */}
+         {/* Sohbet Geçmişi (ORİJİNAL JSX YAPISI) */}
          <div
            ref={mesajKutusuRef}
            className="h-64 overflow-y-auto space-y-3 bg-black/20 p-3 rounded-xl scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent scrollbar-corner-transparent"
@@ -627,7 +629,7 @@ function MasaAsistani() {
                {g.cevap && (
                   <div className={`bg-gray-600/60 p-2 rounded-lg ${g.soru ? 'rounded-bl-none' : ''} self-start max-w-[80%] shadow`}>
                      <span className="font-semibold text-xs opacity-80 block mb-0.5">Neso</span>
-                     {/* Hatanın `ReferenceError: Cannot access 'C' before initialization` olarak işaret ettiği yer bu satır civarıydı */}
+                     {/* Hatanın kaynağı bu satır veya civarı olabilir */}
                      <span className="text-sm">{g.cevap === "..." ? <span className="animate-pulse">Yazıyor...</span> : g.cevap}</span>
                   </div>
                )}
