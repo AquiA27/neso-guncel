@@ -116,6 +116,8 @@ function MasaAsistani() {
 
         // Sunucudan mesaj geldiğinde
         wsRef.current.onmessage = (event) => {
+          // *** EKLENEN LOG - WebSocket mesaj alımı ***
+          console.log(`[Masa ${masaId}] DEBUG: WebSocket Mesajı Geldi:`, event.data);
           try {
             const message = JSON.parse(event.data); // Gelen veriyi JSON olarak işle
             logInfo(`📥 WebSocket mesajı alındı: Tip: ${message.type}`);
@@ -249,7 +251,12 @@ function MasaAsistani() {
   // --- Google TTS ile Sesli Yanıt Verme Fonksiyonu ---
   const sesliYanıtVer = useCallback(async (text) => {
     // API adresi yoksa veya metin boşsa çık
-    if (!API_BASE) { logError("API_BASE tanımlı değil..."); throw new Error("API_BASE not defined"); }
+    if (!API_BASE) {
+        logError("API_BASE tanımlı değil...");
+        // *** EKLENEN LOG - TTS hatası ***
+        console.error(`[Masa ${masaId}] DEBUG: Sesli yanıt verilemiyor - API_BASE tanımsız.`);
+        throw new Error("API_BASE not defined");
+    }
     if (!text) { logWarn("Seslendirilecek metin boş."); return; }
 
     logInfo(`🔊 Sesli yanıt isteği: "${text.substring(0, 50)}..."`);
@@ -258,11 +265,15 @@ function MasaAsistani() {
 
     try {
       // Backend'deki /sesli-yanit endpoint'ine POST isteği gönder
+       // *** EKLENEN LOG - TTS isteği ***
+      console.log(`[Masa ${masaId}] DEBUG: TTS isteği gönderiliyor: /sesli-yanit, Metin: "${text.substring(0,50)}..."`);
       const res = await axios.post(
           `${API_BASE}/sesli-yanit`,
           { text }, // İstek gövdesinde metni gönder
           { responseType: "arraybuffer" } // Yanıtı ses verisi olarak al (byte dizisi)
       );
+       // *** EKLENEN LOG - TTS yanıtı ***
+       console.log(`[Masa ${masaId}] DEBUG: TTS yanıtı alındı. Status: ${res.status}, Data length: ${res.data?.byteLength}`);
 
       // Gelen ses verisini Blob'a çevirip çalınabilir URL oluştur
       const blob = new Blob([res.data], { type: "audio/mpeg" });
@@ -293,11 +304,15 @@ function MasaAsistani() {
       };
     } catch (error) {
       // API isteği veya başka bir hata olursa
+      // *** EKLENEN LOG - TTS Catch Bloğu ***
+      console.error(`[Masa ${masaId}] DEBUG: sesliYanıtVer catch bloğuna düşüldü. Hata:`, error);
       logError("❌ TTS/ses çalma hatası:", error);
       setAudioPlaying(false);
       setHataMesaji("Sesli yanıt alınamadı veya oynatılamadı.");
       // Fallback: Eğer tarayıcı kendi TTS'ini destekliyorsa onu kullanmayı dene
       if (synth && text) {
+        // *** EKLENEN LOG - TTS Fallback ***
+        console.warn(`[Masa ${masaId}] DEBUG: Tarayıcı TTS fallback kullanılıyor.`);
         logWarn("⚠️ Fallback TTS (tarayıcı) kullanılıyor.");
         try { const utt = new SpeechSynthesisUtterance(text); utt.lang = "tr-TR"; synth.speak(utt); }
         catch(ttsError){ logError("Fallback TTS hatası:", ttsError); }
@@ -307,7 +322,7 @@ function MasaAsistani() {
       }
     }
     // useCallback bağımlılıkları: Bu değerler değişirse fonksiyon yeniden oluşturulur
-  }, [API_BASE, logInfo, logError, logWarn]);
+  }, [API_BASE, masaId, logInfo, logError, logWarn, synth]); // synth eklendi
 
   // --- Karşılama Mesajını Oynatma (Input'a ilk odaklanıldığında) ---
   const handleInputFocus = useCallback(async () => {
@@ -325,11 +340,12 @@ function MasaAsistani() {
         localStorage.setItem(karsilamaKey, 'true');
         setKarsilamaYapildi(true); // State'i güncelle
       } catch (error) {
-        // sesliYanıtVer fonksiyonu zaten hatayı logluyor.
+        logError("Karşılama mesajı seslendirilemedi:", error);
+        // sesliYanıtVer fonksiyonu zaten hatayı logluyor ve kullanıcıya gösteriyor.
       }
     }
     // useCallback bağımlılıkları
-  }, [karsilamaYapildi, masaId, menuUrunler.length, sesliYanıtVer, logInfo]);
+  }, [karsilamaYapildi, masaId, menuUrunler.length, sesliYanıtVer, logInfo, logError]);
 
   // --- Kullanıcının Konuşmasından Ürünleri Ayıklama Fonksiyonu ---
    const urunAyikla = useCallback((msg) => {
@@ -352,6 +368,12 @@ function MasaAsistani() {
     const pattern = /(?:(\d+|bir|iki|üç|dört|beş)\s+)?([a-zçğıöşü\s]+?)(?:\s*,\s*|\s+ve\s+|\s+lütfen\b|\s+bi\b|\s*$|\d|bir|iki|üç|dört|beş)/gi;
     let match;
     const sayiMap = { "bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5 }; // Yazıyla sayıları çevir
+
+    // Menü yüklenmemişse ayıklama yapma
+    if (!menuUrunler || menuUrunler.length === 0) {
+        logWarn("⚠️ Ürün ayıklama atlanıyor: Menü ürünleri henüz yüklenmemiş.");
+        return [];
+    }
 
     // Mesajdaki tüm potansiyel ürün ifadelerini bul
     while ((match = pattern.exec(cleanedMsg + " ")) !== null) { // Son kelimeyi de yakalamak için boşluk ekle
@@ -391,13 +413,13 @@ function MasaAsistani() {
              // AI yanıtta bu bilgi verilebilir.
         } else {
             // Eşleşme bulunamadı veya benzerlik düşükse uyar
-            logWarn(`❓ Eşleşme bulunamadı/düşük: "${urunAdiHam}" (En yakın: ${bestMatch.urun}, Benzerlik: ${bestMatch.similarity.toFixed(2)})`);
+            logWarn(`❓ Eşleşme bulunamadı/düşük: "${urunAdiHam}" (En yakın: ${bestMatch.urun || 'Yok'}, Benzerlik: ${bestMatch.similarity.toFixed(2)})`);
         }
     }
-    logInfo(`🛍️ Ayıklanan Sepet: ${items.length} çeşit ürün bulundu.`);
+    logInfo(`🛍️ Ayıklanan Sepet Sonucu: ${items.length} çeşit ürün bulundu.`);
     return items; // Ayıklanan ürünlerin listesini döndür
    // useCallback bağımlılıkları
-  }, [menuUrunler, logInfo, logWarn]);
+  }, [menuUrunler, logInfo, logWarn]); // menuUrunler eklendi
 
   // --- Ana Mesaj Gönderme ve İşleme Fonksiyonu ---
   const gonder = useCallback(async (gonderilecekMesaj) => {
@@ -418,6 +440,7 @@ function MasaAsistani() {
 
     try {
       // 1. Adım: Backend'den AI yanıtını al
+      logInfo("Adım 1: AI Yanıtı alınıyor...");
       const yanitRes = await axios.post(`${API_BASE}/yanitla`, {
         text: kullaniciMesaji,
         masa: masaId
@@ -435,12 +458,18 @@ function MasaAsistani() {
       });
 
       // 2. Adım: AI yanıtını seslendir
+      logInfo("Adım 2: AI Yanıtı seslendiriliyor...");
       await sesliYanıtVer(aiYaniti); // sesliYanıtVer component içinde tanımlı
 
       // 3. Adım: Kullanıcının mesajından sipariş olabilecek ürünleri ayıkla
+      logInfo("Adım 3: Ürünler ayıklanıyor...");
       siparisSepeti = urunAyikla(kullaniciMesaji); // urunAyikla component içinde tanımlı
+      // *** EKLENEN LOG - Ayıklanan Sepet ***
+      console.log(`[Masa ${masaId}] DEBUG: Ayıklanan Sepet:`, JSON.stringify(siparisSepeti));
 
       // 4. Adım: Eğer ayıklanan sepette ürün varsa, siparişi backend'e kaydet
+      // *** EKLENEN LOG - Sepet Kontrolü ***
+      console.log(`[Masa ${masaId}] DEBUG: Sipariş sepeti kontrol ediliyor. Uzunluk: ${siparisSepeti.length}`);
       if (siparisSepeti.length > 0) {
         logInfo("📦 Geçerli sipariş bulundu, backend'e kaydediliyor...");
         const siparisData = {
@@ -449,6 +478,8 @@ function MasaAsistani() {
           yanit: aiYaniti, // AI'nın verdiği yanıt (loglama için)
           sepet: siparisSepeti // Ayıklanan ürünler [{urun, adet, fiyat, kategori}]
         };
+         // *** EKLENEN LOG - Sipariş Gönderme Datası ***
+        console.log(`[Masa ${masaId}] DEBUG: Sipariş API'ye gönderiliyor:`, JSON.stringify(siparisData));
 
         try {
           // /siparis-ekle endpoint'ine POST isteği gönder
@@ -461,9 +492,13 @@ function MasaAsistani() {
           setSiparisDurumu("bekliyor"); // Yeni sipariş verildi, durumu "bekliyor" yap
         } catch (siparisHata) {
           // Sipariş kaydetme sırasında hata olursa logla ve kullanıcıya bildir
+          // *** GÜNCELLENEN LOG - Sipariş Gönderme Hatası ***
+          console.error(`[Masa ${masaId}] DEBUG: /siparis-ekle isteği HATASI:`, siparisHata);
           logError("❌ Sipariş kaydetme API hatası:", siparisHata);
-          const hataDetayi = siparisHata.response?.data?.detail || siparisHata.message;
+          const hataDetayi = siparisHata.response?.data?.detail || siparisHata.message || "Bilinmeyen API hatası.";
           setHataMesaji(`Siparişiniz kaydedilirken bir sorun oluştu: ${hataDetayi}`);
+          // Hatayı sohbet geçmişine de yazabiliriz
+          setGecmis((prev) => [...prev, { soru: "", cevap: `Sipariş gönderilemedi: ${hataDetayi}` }]);
         }
       } else {
         // Mesajda sipariş olarak algılanan ürün yoksa bilgi ver
@@ -472,6 +507,8 @@ function MasaAsistani() {
 
     } catch (error) {
       // Genel hata (AI yanıtı alma, seslendirme vb.)
+       // *** EKLENEN LOG - Genel Gönder Hatası ***
+      console.error(`[Masa ${masaId}] DEBUG: gonder fonksiyonu genel catch bloğuna düşüldü. Hata:`, error);
       logError("❌ Mesaj gönderme/işleme genel hatası:", error);
       const hataDetayi = error.response?.data?.detail || error.message || "Bilinmeyen bir hata oluştu.";
       setHataMesaji(`İşlem sırasında bir hata oluştu: ${hataDetayi}`);
@@ -485,10 +522,11 @@ function MasaAsistani() {
       });
     } finally {
       // Hata olsa da olmasa da yükleniyor durumunu bitir
+      logInfo("Adım 5: İşlem tamamlandı (finally).");
       setLoading(false);
     }
     // useCallback bağımlılıkları
-  }, [mesaj, loading, API_BASE, masaId, sesliYanıtVer, urunAyikla, logInfo, logError]);
+  }, [mesaj, loading, API_BASE, masaId, sesliYanıtVer, urunAyikla, logInfo, logError, logWarn]); // logWarn eklendi
 
    // --- Sesle Dinleme İşlemini Başlatma/Durdurma ---
    const sesiDinle = useCallback(() => {
@@ -502,14 +540,22 @@ function MasaAsistani() {
     recognizer.lang = "tr-TR"; // Türkçe dinle
     recognizer.continuous = false; // Tek bir sonuç döndürsün yeterli
     recognizer.interimResults = false; // Ara sonuçları istemiyoruz
-    recognizer.start(); // Dinlemeye başla
-    setMicActive(true); // Mikrofon butonunu aktif göster
+    try {
+        recognizer.start(); // Dinlemeye başla
+        setMicActive(true); // Mikrofon butonunu aktif göster
+    } catch (err) {
+         logError("🎤 Mikrofon başlatılamadı:", err);
+         setHataMesaji("Mikrofon başlatılamadı. İzinleri kontrol edin.");
+         setMicActive(false);
+         return;
+    }
+
 
     // Sonuç geldiğinde
     recognizer.onresult = async (event) => {
         const transcript = event.results[0][0].transcript; // Tanınan metni al
         logInfo(`👂 Ses tanıma sonucu: "${transcript}"`);
-        setMicActive(false); // Mikrofonu kapat
+        setMicActive(false); // Mikrofonu kapat (dinleme bittiği için)
         setMesaj(transcript); // Metni input'a yaz
         await gonder(transcript); // Otomatik olarak gönder fonksiyonunu çağır
     };
@@ -521,16 +567,20 @@ function MasaAsistani() {
         if (event.error === 'no-speech') { setHataMesaji("Konuşma algılanmadı."); }
         else if (event.error === 'audio-capture') { setHataMesaji("Mikrofon erişilemiyor."); }
         else if (event.error === 'not-allowed') { setHataMesaji("Mikrofon izni verilmedi."); }
-        else { setHataMesaji("Ses tanıma hatası."); }
+        else { setHataMesaji(`Ses tanıma hatası: ${event.error}`); }
     };
-    // Dinleme bittiğinde
+    // Dinleme bittiğinde (başarılı sonuç olmasa bile)
     recognizer.onend = () => {
-        logInfo("🏁 Ses tanıma bitti.");
-        setMicActive(false); // Mikrofonu kapat
+        // onresult tetiklenmişse micActive zaten false olmuştur.
+        // Eğer onresult tetiklenmeden biterse (örn: hata, no-speech), burada false yapalım.
+        if (micActive) {
+             logInfo("🏁 Ses tanıma bitti (sonuçsuz veya hata ile).");
+             setMicActive(false); // Mikrofonu kapat
+        }
         recognitionRef.current = null; // Referansı temizle
     };
     // useCallback bağımlılıkları
-  }, [micActive, gonder, logInfo, logError]);
+  }, [micActive, gonder, logInfo, logError, masaId]); // masaId eklendi
 
   // --- Neso'nun Konuşmasını Durdurma Fonksiyonu ---
   const durdur = useCallback(() => {
@@ -547,7 +597,7 @@ function MasaAsistani() {
         logInfo("🛑 Tarayıcı TTS konuşması durduruldu.");
         setAudioPlaying(false); // State'i güncelle
     }
-  }, []); // Bağımlılık yok
+  }, [synth]); // synth eklendi
 
   // Her render'da sipariş durumu metnini hesapla
   const durumText = getDurumText(siparisDurumu);
@@ -610,7 +660,7 @@ function MasaAsistani() {
           🛑 Konuşmayı Durdur
         </button>
 
-         {/* Sohbet Geçmişi (ORİJİNAL JSX YAPISI) */}
+         {/* Sohbet Geçmişi */}
          <div
            ref={mesajKutusuRef}
            className="h-64 overflow-y-auto space-y-3 bg-black/20 p-3 rounded-xl scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent scrollbar-corner-transparent"
@@ -629,7 +679,6 @@ function MasaAsistani() {
                {g.cevap && (
                   <div className={`bg-gray-600/60 p-2 rounded-lg ${g.soru ? 'rounded-bl-none' : ''} self-start max-w-[80%] shadow`}>
                      <span className="font-semibold text-xs opacity-80 block mb-0.5">Neso</span>
-                     {/* Hatanın kaynağı bu satır veya civarı olabilir */}
                      <span className="text-sm">{g.cevap === "..." ? <span className="animate-pulse">Yazıyor...</span> : g.cevap}</span>
                   </div>
                )}
@@ -640,7 +689,6 @@ function MasaAsistani() {
                  <div className="text-center text-sm opacity-70 animate-pulse">Bağlanılıyor...</div>
             )}
          </div>
-         {/* // ORİJİNAL JSX SONU */}
 
         {/* Footer */}
         <p className="text-center text-xs opacity-60 mt-6">☕ Neso Asistan v1.1 © {new Date().getFullYear()}</p>
