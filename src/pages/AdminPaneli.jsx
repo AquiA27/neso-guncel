@@ -23,8 +23,8 @@ function AdminPaneli() {
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(() => typeof window !== 'undefined' && localStorage.getItem("adminGiris") === "true");
-  const [gunluk, setGunluk] = useState({ siparis_sayisi: 0, gelir: 0 });
-  const [aylik, setAylik] = useState({ siparis_sayisi: 0, gelir: 0 });
+  const [gunluk, setGunluk] = useState({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
+  const [aylik, setAylik] = useState({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
   const [yillikChartData, setYillikChartData] = useState([]);
   const [populer, setPopuler] = useState([]);
   const [aktifMasaSayisi, setAktifMasaSayisi] = useState(0);
@@ -69,7 +69,7 @@ function AdminPaneli() {
         siparisRes,
         gunlukRes,
         aylikRes,
-        yillikRes,
+        yillikRes, // Bu yillik-aylik-kirilim olacak
         populerRes,
         aktifMasalarRes,
         menuRes
@@ -77,9 +77,9 @@ function AdminPaneli() {
         axios.get(`${API_BASE}/siparisler`, { headers }),
         axios.get(`${API_BASE}/istatistik/gunluk`, { headers }),
         axios.get(`${API_BASE}/istatistik/aylik`, { headers }),
-        axios.get(`${API_BASE}/istatistik/yillik`, { headers }),
+        axios.get(`${API_BASE}/istatistik/yillik-aylik-kirilim`, { headers }), // DÜZELTİLDİ
         axios.get(`${API_BASE}/istatistik/en-cok-satilan`, { headers }),
-        axios.get(`${API_BASE}/aktif-masalar`, { headers }),
+        axios.get(`${API_BASE}/aktif-masalar`, { headers }), // Bu endpoint backend'de vardı, emin olalım
         axios.get(`${API_BASE}/menu`, { headers })
       ]);
 
@@ -91,16 +91,20 @@ function AdminPaneli() {
       }
 
       setOrders(siparisRes?.data?.orders || []);
-      setGunluk(gunlukRes?.data || { siparis_sayisi: 0, gelir: 0 });
-      setAylik(aylikRes?.data || { siparis_sayisi: 0, gelir: 0 });
+      setGunluk(gunlukRes?.data || { siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
+      setAylik(aylikRes?.data || { siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
       setPopuler(populerRes?.data || []);
       setAktifMasaSayisi(aktifMasalarRes?.data?.tables?.length || 0);
 
-      const yillikRawData = yillikRes?.data || {};
-      const formattedYillikData = Object.entries(yillikRawData)
-        .map(([tarih, adet]) => ({ tarih, adet: Number(adet) || 0 }))
-        .sort((a, b) => a.tarih.localeCompare(b.tarih));
-      setYillikChartData(formattedYillikData);
+      // Yıllık chart data işleme DÜZELTİLDİ
+      const yillikHamVeri = yillikRes?.data?.aylik_kirilim || {};
+      const formatlanmisYillikVeri = Object.entries(yillikHamVeri)
+        .map(([tarih, veri]) => ({
+          tarih: tarih, // YYYY-AA formatında
+          adet: Number(veri?.satilan_urun_adedi) || 0 // Grafikte satılan ürün adedini gösteriyoruz
+        }))
+        .sort((a, b) => a.tarih.localeCompare(b.tarih)); // Tarihe göre sırala
+      setYillikChartData(formatlanmisYillikVeri);
 
       setMenu(menuRes?.data?.menu || []);
       logInfo("✅ Veriler başarıyla getirildi.");
@@ -114,18 +118,25 @@ function AdminPaneli() {
         }
         setIsLoggedIn(false);
       } else {
-        setError(`Veriler alınamadı: ${errorDetail}`);
+        setError(`Veriler alınamadı: ${errorDetail} (URL: ${err.config?.url || 'Bilinmiyor'})`);
       }
     } finally {
       setLoading(false);
     }
-  }, [isLoggedIn, logInfo, logError, logWarn, API_BASE]);
+  }, [isLoggedIn, logInfo, logError, logWarn]); // API_BASE bağımlılıklardan çıkarıldı, çünkü üstte tanımlı ve değişmiyor.
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     const authHeader = { Authorization: "Basic " + btoa(`${loginCredentials.username}:${loginCredentials.password}`) };
+    // Giriş yaparken de API_BASE kontrolü yapalım.
+    if (!API_BASE) {
+        logError("API_BASE tanımlı değil, giriş yapılamıyor.");
+        setError("API adresi yapılandırılmamış.");
+        setLoading(false);
+        return;
+    }
     await verileriGetir(true, authHeader);
     setLoginCredentials({ username: "", password: "" });
   };
@@ -173,7 +184,7 @@ function AdminPaneli() {
             logInfo(`📥 Admin WS mesajı alındı: Tip: ${message.type}`);
             if (['siparis', 'durum', 'masa_durum', 'menu_guncellendi'].includes(message.type)) {
               logInfo(`⚡ WS: ${message.type} alındı, veriler yenileniyor...`);
-              verileriGetir();
+              verileriGetir(true); // Verileri retry olarak çek, loading gösterilsin.
             } else if (message.type === 'pong') {
               /* İşlem yok */
             } else {
@@ -193,18 +204,20 @@ function AdminPaneli() {
           wsRef.current = null;
 
           const stillLoggedIn = typeof window !== 'undefined' && localStorage.getItem("adminGiris") === "true";
+          // Sadece kullanıcı hala giriş yapmışsa ve beklenmedik bir kapanmaysa yeniden bağlanmayı dene
           if (stillLoggedIn && event.code !== 1000 && event.code !== 1001 && !event.wasClean) {
             logInfo("Admin WS beklenmedik şekilde kapandı, 3sn sonra tekrar denenecek...");
             if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
             reconnectTimeoutId = setTimeout(() => {
+              // Yeniden bağlanmadan önce hala girişli olup olmadığını ve ws'in null olup olmadığını kontrol et
               if (wsRef.current === null && (typeof window !== 'undefined' && localStorage.getItem("adminGiris") === "true")) {
                 connectWebSocket();
               } else {
-                logInfo("Yeniden bağlanma iptal edildi.");
+                logInfo("Yeniden bağlanma iptal edildi (koşullar sağlanmadı).");
               }
-            }, 3000 + Math.random() * 1000);
+            }, 3000 + Math.random() * 1000); // Jitter ekle
           } else if (!stillLoggedIn) {
-            logInfo("Tekrar bağlanma iptal edildi (çıkış yapılmış).");
+            logInfo("WS tekrar bağlanma iptal edildi (kullanıcı çıkış yapmış).");
           }
         };
       } catch (error) {
@@ -220,10 +233,11 @@ function AdminPaneli() {
           wsRef.current.send(JSON.stringify({ type: 'ping' }));
         } catch (err) {
           logError("Admin Ping gönderilemedi:", err);
-          wsRef.current.close(1000, "Ping failed");
+          // Hata durumunda bağlantıyı kapatıp yeniden denenmesini sağlamak daha iyi olabilir.
+          if (wsRef.current) wsRef.current.close(1006, "Ping failed, closing connection");
         }
       }
-    }, 30000);
+    }, 30000); // 30 saniyede bir ping
 
     if (isLoggedIn) {
       connectWebSocket();
@@ -234,11 +248,11 @@ function AdminPaneli() {
       if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
       if (wsRef.current) {
         logInfo("Admin Paneli: Component kaldırılıyor, WebSocket kapatılıyor.");
-        wsRef.current.close(1000, "Component unmounting");
+        wsRef.current.close(1000, "Component unmounting"); // Normal kapatma
         wsRef.current = null;
       }
     };
-  }, [isLoggedIn, logInfo, logError, logWarn, verileriGetir]);
+  }, [isLoggedIn, logInfo, logError, logWarn, verileriGetir]); // verileriGetir'i bağımlılıklara ekledik.
 
   useEffect(() => {
     const initialLoggedIn = typeof window !== 'undefined' && localStorage.getItem("adminGiris") === "true";
@@ -247,9 +261,15 @@ function AdminPaneli() {
       verileriGetir();
     } else {
       logInfo("İlk yükleme: Giriş yapılmamış.");
-      setLoading(false);
+      setLoading(false); // Eğer giriş yapılmamışsa loading false olmalı
     }
-  }, [verileriGetir]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Bu useEffect'in sadece bir kere çalışması için verileriGetir'i bağımlılıktan çıkardık.
+          // Ancak, verileriGetir useCallback ile memoize edildiği için sorun yaratmayabilir.
+          // Eğer lint uyarısı veriyorsa ve verileriGetir'in ilk renderda çağrılması gerekiyorsa,
+          // initialLoggedIn kontrolünü useEffect dışına alıp, state'i ona göre set edebilirsiniz
+          // ya da eslint-disable-next-line yorumunu kullanabilirsiniz.
+
 
   const urunEkle = useCallback(async () => {
     if (!yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori) {
@@ -265,6 +285,12 @@ function AdminPaneli() {
     logInfo(`➕ Ürün ekleniyor: ${JSON.stringify({ ...yeniUrun, fiyat: fiyatNum })}`);
     setLoading(true);
     setError(null);
+    if (!API_BASE) {
+        logError("API_BASE tanımlı değil, ürün eklenemiyor.");
+        setError("API adresi yapılandırılmamış.");
+        setLoading(false);
+        return;
+    }
     try {
       await axios.post(
         `${API_BASE}/menu/ekle`,
@@ -273,7 +299,7 @@ function AdminPaneli() {
       );
       logInfo("✅ Ürün başarıyla eklendi.");
       setYeniUrun({ ad: "", fiyat: "", kategori: "" });
-      await verileriGetir(true);
+      await verileriGetir(true); // Verileri güncelleyerek yeniden çek
       alert("Ürün başarıyla eklendi.");
     } catch (err) {
       logError("❌ Ürün eklenemedi:", err);
@@ -283,7 +309,7 @@ function AdminPaneli() {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, yeniUrun, verileriGetir, logInfo, logError]);
+  }, [yeniUrun, verileriGetir, logInfo, logError]); // API_BASE çıkarıldı
 
   const urunSil = useCallback(async () => {
     if (!silUrunAdi) {
@@ -291,6 +317,10 @@ function AdminPaneli() {
       return;
     }
     const urunAdiTrimmed = silUrunAdi.trim();
+    if (!urunAdiTrimmed) {
+        alert("Lütfen silinecek ürünün adını girin.");
+        return;
+    }
     const urunAdiTrimmedLower = urunAdiTrimmed.toLowerCase();
 
     const urunVarMi = menu?.some(kategori =>
@@ -308,14 +338,20 @@ function AdminPaneli() {
     logInfo(`➖ Ürün siliniyor: ${urunAdiTrimmed}`);
     setLoading(true);
     setError(null);
+    if (!API_BASE) {
+        logError("API_BASE tanımlı değil, ürün silinemiyor.");
+        setError("API adresi yapılandırılmamış.");
+        setLoading(false);
+        return;
+    }
     try {
       await axios.delete(`${API_BASE}/menu/sil`, {
-        params: { urun_adi: urunAdiTrimmed },
+        params: { urun_adi: urunAdiTrimmed }, // urun_adi parametresini query string olarak gönder
         headers: { Authorization: "Basic " + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`) }
       });
       logInfo("🗑️ Ürün başarıyla silindi.");
       setSilUrunAdi("");
-      await verileriGetir(true);
+      await verileriGetir(true); // Verileri güncelleyerek yeniden çek
       alert("Ürün başarıyla silindi.");
     } catch (err) {
       logError("❌ Ürün silinemedi:", err);
@@ -325,7 +361,7 @@ function AdminPaneli() {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, silUrunAdi, menu, verileriGetir, logInfo, logError]);
+  }, [silUrunAdi, menu, verileriGetir, logInfo, logError]); // API_BASE çıkarıldı
 
   const cikisYap = () => {
     logInfo("🚪 Çıkış yapılıyor...");
@@ -336,11 +372,12 @@ function AdminPaneli() {
     setError(null);
     setOrders([]);
     setMenu([]);
-    setGunluk({ siparis_sayisi: 0, gelir: 0 });
-    setAylik({ siparis_sayisi: 0, gelir: 0 });
+    setGunluk({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
+    setAylik({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
     setYillikChartData([]);
     setPopuler([]);
     setAktifMasaSayisi(0);
+    // WebSocket bağlantısı isLoggedIn state'ine bağlı useEffect içinde kapatılacak.
   };
 
   const filtrelenmisSiparisler = orders.filter((o) => {
@@ -364,7 +401,7 @@ function AdminPaneli() {
           sepetText = o.sepet;
         }
       } catch (e) {
-        sepetText = o.sepet;
+        sepetText = o.sepet; // Parse edilemezse orijinal string'i kullan
       }
     }
 
@@ -380,6 +417,7 @@ function AdminPaneli() {
     return aranacakMetin.includes(aramaLower);
   });
 
+  // Giriş formu kısmı...
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-100 to-orange-100 p-4">
@@ -424,6 +462,7 @@ function AdminPaneli() {
     );
   }
 
+  // Admin paneli JSX'i...
   return (
     <div className="p-4 md:p-8 bg-gradient-to-tr from-slate-100 to-slate-200 min-h-screen text-gray-800 font-sans relative">
       {error && (
@@ -431,7 +470,7 @@ function AdminPaneli() {
           <strong className="font-bold">Hata: </strong>
           <span className="block sm:inline mr-2">{error}</span>
           <button
-            onClick={() => verileriGetir(true)}
+            onClick={() => verileriGetir(true)} // Hata durumunda verileri yeniden çek
             className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition duration-200 ease-in-out ml-4"
             disabled={loading}
           >
@@ -459,16 +498,17 @@ function AdminPaneli() {
         </button>
       </div>
 
+      {/* İstatistik Kartları */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
             <Coffee className="w-5 h-5 text-blue-500" /> Günlük Ürün Adedi
           </h3>
-          <CountUp end={gunluk?.siparis_sayisi || 0} separator="." className="text-3xl font-bold text-blue-700 block" />
+          <CountUp end={gunluk?.satilan_urun_adedi || 0} separator="." className="text-3xl font-bold text-blue-700 block" />
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-green-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">₺ Günlük Gelir</h3>
-          <CountUp end={gunluk?.gelir || 0} separator="." decimal="," decimals={2} prefix="₺" className="text-3xl font-bold text-green-700 block" />
+          <CountUp end={gunluk?.toplam_gelir || 0} separator="." decimal="," decimals={2} prefix="₺" className="text-3xl font-bold text-green-700 block" />
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-purple-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
@@ -488,17 +528,18 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Grafikler */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-lg">
-          <h3 className="text-lg font-semibold mb-4 text-gray-700">📈 Aylık Satılan Ürün Adedi</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-700">📈 Aylık Satılan Ürün Adedi (Yıllık Kırılım)</h3>
           <div className="h-64">
             {yillikChartData?.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={yillikChartData} margin={{ top: 5, right: 25, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                  <XAxis dataKey="tarih" fontSize={12} />
+                  <XAxis dataKey="tarih" fontSize={12} tickFormatter={(value) => value.substring(5)} /> {/* Sadece AY göster */}
                   <YAxis fontSize={12} allowDecimals={false} />
-                  <Tooltip formatter={(value, name, props) => [`${value} Adet`, `Tarih: ${props.payload.tarih}`]} />
+                  <Tooltip formatter={(value, name, props) => [`${value} Adet`, `Dönem: ${props.payload.tarih}`]} />
                   <Legend />
                   <Line type="monotone" dataKey="adet" name="Aylık Ürün Adedi" stroke="#4F46E5" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                 </LineChart>
@@ -528,11 +569,13 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Menü Yönetimi */}
       <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
         <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
           <MenuSquare className="w-5 h-5 text-teal-600" /> Menü Yönetimi
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Yeni Ürün Ekle Formu */}
           <div className="md:col-span-1 space-y-6">
             <div>
               <h4 className="font-medium mb-3 text-gray-600">Yeni Ürün Ekle</h4>
@@ -576,6 +619,7 @@ function AdminPaneli() {
                 </div>
               </form>
             </div>
+            {/* Ürün Sil Formu */}
             <div className="pt-4 border-t border-gray-200">
               <h4 className="font-medium mb-3 text-gray-600">Ürün Sil</h4>
               <form onSubmit={(e) => { e.preventDefault(); urunSil(); }}>
@@ -601,6 +645,7 @@ function AdminPaneli() {
               </form>
             </div>
           </div>
+          {/* Mevcut Menü Gösterimi */}
           <div className="md:col-span-2">
             <h4 className="font-medium mb-3 text-gray-600">Mevcut Menü</h4>
             {loading && (!menu || menu.length === 0) && (
@@ -646,6 +691,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Sipariş Geçmişi */}
       <div className="bg-white p-6 rounded-lg shadow-lg">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">📋 Sipariş Geçmişi</h3>
         <input
@@ -745,6 +791,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Ayarlar Bölümü */}
       <div className="bg-white p-6 rounded-lg shadow-lg mt-8">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">⚙️ Ayarlar</h3>
         <div className="text-sm text-gray-600 space-y-2">
