@@ -5,6 +5,7 @@ import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
 import Home from "./pages/Home";
+import KasaEkrani from "./pages/KasaEkrani"; // <-- YENİ: KasaEkrani import edildi
 import "./index.css";
 
 function App() {
@@ -25,6 +26,9 @@ function App() {
 
         {/* Admin ekranı */}
         <Route path="/admin" element={<AdminPaneli />} />
+
+        {/* Kasa Ekranı <-- YENİ EKLENDİ --> */}
+        <Route path="/kasa" element={<KasaEkrani />} />
 
         {/* 404 - Sayfa bulunamadı */}
         <Route
