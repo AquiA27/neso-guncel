@@ -15,7 +15,7 @@ import CountUp from "react-countup";
 import {
   UserCheck,
   Coffee,
-  TrendingUp,
+  // TrendingUp, // Kullanılmıyorsa yorum satırı veya kaldırılabilir
   Settings,
   LogOut,
   AlertCircle,
@@ -23,6 +23,8 @@ import {
   Trash2,
   PlusCircle,
   RotateCw,
+  DollarSign, // İkon
+  ListChecks, // Yeni ikon
 } from "lucide-react";
 import axios from "axios";
 
@@ -40,17 +42,18 @@ function AdminPaneli() {
   );
   const [gunluk, setGunluk] = useState({
     siparis_sayisi: 0,
-    gelir: 0,
+    toplam_gelir: 0, // 'gelir' -> 'toplam_gelir' olarak güncellendi
     satilan_urun_adedi: 0,
   });
   const [aylik, setAylik] = useState({
     siparis_sayisi: 0,
-    gelir: 0,
+    toplam_gelir: 0, // 'gelir' -> 'toplam_gelir' olarak güncellendi
     satilan_urun_adedi: 0,
   });
   const [yillikChartData, setYillikChartData] = useState([]);
   const [populer, setPopuler] = useState([]);
-  const [aktifMasaSayisi, setAktifMasaSayisi] = useState(0);
+  // const [aktifMasaSayisi, setAktifMasaSayisi] = useState(0); // ESKİ STATE
+  const [aktifMasaOzetleri, setAktifMasaOzetleri] = useState([]); // YENİ STATE
   const [menu, setMenu] = useState([]);
   const [yeniUrun, setYeniUrun] = useState({
     ad: "",
@@ -59,7 +62,7 @@ function AdminPaneli() {
   });
   const [silUrunAdi, setSilUrunAdi] = useState("");
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(() => isLoggedIn);
+  const [loading, setLoading] = useState(() => isLoggedIn); // İlk yükleme için isLoggedIn'e bağlı
   const [loginCredentials, setLoginCredentials] = useState({
     username: "",
     password: "",
@@ -68,7 +71,7 @@ function AdminPaneli() {
 
   const logInfo = useCallback((message) => console.log(`[Admin Paneli] INFO: ${message}`), []);
   const logError = useCallback(
-    (message, error) => console.error(`[Admin Paneli] ERROR: ${message}`, error || ""),
+    (message, errorObj) => console.error(`[Admin Paneli] ERROR: ${message}`, errorObj || ""),
     []
   );
   const logWarn = useCallback((message) => console.warn(`[Admin Paneli] WARN: ${message}`), []);
@@ -80,7 +83,7 @@ function AdminPaneli() {
   const verileriGetir = useCallback(async (isRetry = false, customAuthHeader = null) => {
     if (!isLoggedIn && !isRetry && !customAuthHeader) {
       logWarn("Giriş yapılmamış, veri çekme atlanıyor.");
-      setLoading(false);
+      setLoading(false); // Giriş yapılmamışsa loading'i kapat
       return;
     }
 
@@ -106,7 +109,7 @@ function AdminPaneli() {
         aylikRes,
         yillikRes,
         populerRes,
-        aktifMasalarRes,
+        aktifMasalarTutarlariRes, // Değişti: Yeni endpoint için yanıt
         menuRes,
       ] = await Promise.all([
         axios.get(`${API_BASE}/siparisler`, { headers }),
@@ -114,12 +117,14 @@ function AdminPaneli() {
         axios.get(`${API_BASE}/istatistik/aylik`, { headers }),
         axios.get(`${API_BASE}/istatistik/yillik-aylik-kirilim`, { headers }),
         axios.get(`${API_BASE}/istatistik/en-cok-satilan`, { headers }),
-        axios.get(`${API_BASE}/aktif-masalar`, { headers }), // backend'de count dönüyor
+        axios.get(`${API_BASE}/admin/aktif-masa-tutarlari`, { headers }), // YENİ ENDPOINT
         axios.get(`${API_BASE}/menu`, { headers }),
       ]);
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("adminGiris", "true");
+      if (typeof window !== "undefined" && (isRetry || customAuthHeader)) { // Sadece başarılı giriş denemesinde localStorage'a yaz
+        if (siparisRes.status === 200) { // Veya daha genel bir başarı kontrolü
+            localStorage.setItem("adminGiris", "true");
+        }
       }
       if (!isLoggedIn && (siparisRes.status === 200 || isRetry)) {
         setIsLoggedIn(true);
@@ -127,21 +132,20 @@ function AdminPaneli() {
 
       setOrders(siparisRes?.data?.orders || []);
       setGunluk(
-        gunlukRes?.data || { siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 }
+        gunlukRes?.data || { siparis_sayisi: 0, toplam_gelir: 0, satilan_urun_adedi: 0 }
       );
       setAylik(
-        aylikRes?.data || { siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 }
+        aylikRes?.data || { siparis_sayisi: 0, toplam_gelir: 0, satilan_urun_adedi: 0 }
       );
       setPopuler(populerRes?.data || []);
-      // Burada artık .count alanını kullanıyoruz
-      setAktifMasaSayisi(aktifMasalarRes?.data?.count || 0);
+      setAktifMasaOzetleri(aktifMasalarTutarlariRes?.data || []); // YENİ: Aktif masa özetlerini ayarla
 
-      // Yıllık chart data işleme
       const yillikHamVeri = yillikRes?.data?.aylik_kirilim || {};
       const formatlanmisYillikVeri = Object.entries(yillikHamVeri)
         .map(([tarih, veri]) => ({
           tarih,
           adet: Number(veri?.satilan_urun_adedi) || 0,
+          gelir: Number(veri?.toplam_gelir) || 0, 
         }))
         .sort((a, b) => a.tarih.localeCompare(b.tarih));
       setYillikChartData(formatlanmisYillikVeri);
@@ -167,7 +171,7 @@ function AdminPaneli() {
       setLoading(false);
     }
   }, [isLoggedIn, logInfo, logError, logWarn]);
-
+  
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -181,8 +185,10 @@ function AdminPaneli() {
       setLoading(false);
       return;
     }
-    await verileriGetir(true, authHeader);
-    setLoginCredentials({ username: "", password: "" });
+    // verileriGetir'i customAuthHeader ile çağırıyoruz.
+    // verileriGetir içinde başarılı olursa localStorage'a yazacak ve isLoggedIn'i true yapacak.
+    await verileriGetir(true, authHeader); 
+    setLoginCredentials({ username: "", password: "" }); // Formu temizle
   };
 
   useEffect(() => {
@@ -192,7 +198,7 @@ function AdminPaneli() {
         wsRef.current.close(1000, "User logged out");
         wsRef.current = null;
       }
-      return;
+      return; // Giriş yapılmamışsa WebSocket bağlantısı kurma
     }
 
     let reconnectTimeoutId = null;
@@ -207,7 +213,7 @@ function AdminPaneli() {
       }
       if (!API_BASE) {
         logError("API_BASE tanımlı değil, WS kurulamıyor.");
-        setError("Sunucu bağlantısı kurulamıyor.");
+        // Bu durumda setError admin panelinde zaten gösteriliyor olacak.
         return;
       }
 
@@ -236,7 +242,7 @@ function AdminPaneli() {
               )
             ) {
               logInfo(`⚡ WS: ${message.type} alındı, veriler yenileniyor...`);
-              verileriGetir(true);
+              verileriGetir(true); // Retry true olarak göndererek kimlik bilgilerini kullanmasını sağlıyoruz
             }
           } catch (err) {
             logError("Admin WS mesaj işleme hatası:", err);
@@ -245,6 +251,7 @@ function AdminPaneli() {
 
         wsRef.current.onerror = (errorEvent) => {
           logError("❌ Admin WebSocket hatası:", errorEvent);
+          // Hata durumunda bir mesaj gösterilebilir veya yeniden bağlanma denemesi loglanabilir.
         };
 
         wsRef.current.onclose = (event) => {
@@ -253,22 +260,25 @@ function AdminPaneli() {
               event.reason || "Yok"
             }`
           );
-          wsRef.current = null;
+          wsRef.current = null; // Referansı temizle
+          // localStorage'dan güncel giriş durumunu kontrol et
           const stillLoggedIn =
             typeof window !== "undefined" &&
             localStorage.getItem("adminGiris") === "true";
+            
           if (
-            stillLoggedIn &&
-            event.code !== 1000 &&
-            event.code !== 1001 &&
-            !event.wasClean
+            stillLoggedIn && // Sadece hala giriş yapmışsa yeniden bağlanmayı dene
+            event.code !== 1000 && // Normal kapatma değilse
+            event.code !== 1001 && // Sekme kapatma değilse
+            !event.wasClean      // Kasıtlı kapatma değilse
           ) {
             logInfo("Admin WS beklenmedik şekilde kapandı, 3sn sonra tekrar denenecek...");
+            // Yeniden bağlanma denemesi için zamanlayıcı ayarla
             reconnectTimeoutId = setTimeout(connectWebSocket, 3000 + Math.random() * 1000);
           }
         };
       } catch (error) {
-        logError("❌ Admin WebSocket başlatılırken hata:", error);
+        logError("❌ Admin WebSocket başlatılırken kritik hata:", error);
         setError("Sunucu bağlantısı (WebSocket) kurulamıyor.");
       }
     };
@@ -285,22 +295,22 @@ function AdminPaneli() {
           if (wsRef.current) wsRef.current.close(1006, "Ping failed, closing connection");
         }
       }
-    }, 30000);
+    }, 30000); // 30 saniyede bir ping
 
-    if (isLoggedIn) {
+    if (isLoggedIn) { // Sadece giriş yapılmışsa WebSocket'i başlat
       connectWebSocket();
     }
 
-    return () => {
+    return () => { // Cleanup fonksiyonu
       clearInterval(pingIntervalId);
       if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
       if (wsRef.current) {
         logInfo("Admin Paneli: Component kaldırılıyor, WebSocket kapatılıyor.");
-        wsRef.current.close(1000, "Component unmounting");
+        wsRef.current.close(1000, "Component unmounting"); // Normal kapatma
         wsRef.current = null;
       }
     };
-  }, [isLoggedIn, logInfo, logError, logWarn, verileriGetir]);
+  }, [isLoggedIn, logInfo, logError, logWarn, verileriGetir]); // verileriGetir'i bağımlılıklara ekledik
 
   useEffect(() => {
     const initialLoggedIn =
@@ -308,13 +318,13 @@ function AdminPaneli() {
       localStorage.getItem("adminGiris") === "true";
     if (initialLoggedIn) {
       logInfo("İlk yükleme: Giriş yapılmış, veriler çekiliyor...");
-      verileriGetir();
+      verileriGetir(); // Giriş yapılmışsa verileri çek
     } else {
       logInfo("İlk yükleme: Giriş yapılmamış.");
-      setLoading(false);
+      setLoading(false); // Giriş yapılmamışsa loading'i kapat
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Bu useEffect sadece ilk mount'ta çalışmalı, verileriGetir'i bağımlılıktan çıkardık.
 
   const urunEkle = useCallback(async () => {
     if (!yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori) {
@@ -349,8 +359,8 @@ function AdminPaneli() {
         }
       );
       logInfo("✅ Ürün başarıyla eklendi.");
-      setYeniUrun({ ad: "", fiyat: "", kategori: "" });
-      await verileriGetir(true);
+      setYeniUrun({ ad: "", fiyat: "", kategori: "" }); // Formu temizle
+      await verileriGetir(true); // Verileri yenile (retry=true ile)
       alert("Ürün başarıyla eklendi.");
     } catch (err) {
       logError("❌ Ürün eklenemedi:", err);
@@ -375,17 +385,18 @@ function AdminPaneli() {
     }
     const urunAdiTrimmedLower = urunAdiTrimmed.toLowerCase();
 
+    // Menü state'i üzerinden kontrol et (menu state'inin güncel olduğundan emin ol)
     const urunVarMi = menu?.some((kategori) =>
       kategori?.urunler?.some(
         (urun) => urun?.ad?.trim().toLowerCase() === urunAdiTrimmedLower
       )
     );
     if (!urunVarMi) {
-      alert(`'${urunAdiTrimmed}' adında bir ürün menüde bulunamadı.`);
+      alert(`'${urunAdiTrimmed}' adında bir ürün menüde bulunamadı. Menü güncel mi?`);
       return;
     }
 
-    if (!window.confirm(`'${urunAdiTrimmed}' adlı ürünü silmek istediğinize emin misiniz?`)) {
+    if (!window.confirm(`'${urunAdiTrimmed}' adlı ürünü silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
       return;
     }
 
@@ -400,15 +411,15 @@ function AdminPaneli() {
     }
     try {
       await axios.delete(`${API_BASE}/menu/sil`, {
-        params: { urun_adi: urunAdiTrimmed },
+        params: { urun_adi: urunAdiTrimmed }, // Backend'e ürün adını query param olarak gönder
         headers: {
           Authorization:
             "Basic " + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`),
         },
       });
       logInfo("🗑️ Ürün başarıyla silindi.");
-      setSilUrunAdi("");
-      await verileriGetir(true);
+      setSilUrunAdi(""); // Input'u temizle
+      await verileriGetir(true); // Verileri yenile
       alert("Ürün başarıyla silindi.");
     } catch (err) {
       logError("❌ Ürün silinemedi:", err);
@@ -430,17 +441,19 @@ function AdminPaneli() {
     setError(null);
     setOrders([]);
     setMenu([]);
-    setGunluk({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
-    setAylik({ siparis_sayisi: 0, gelir: 0, satilan_urun_adedi: 0 });
+    setGunluk({ siparis_sayisi: 0, toplam_gelir: 0, satilan_urun_adedi: 0 });
+    setAylik({ siparis_sayisi: 0, toplam_gelir: 0, satilan_urun_adedi: 0 });
     setYillikChartData([]);
     setPopuler([]);
-    setAktifMasaSayisi(0);
+    // setAktifMasaSayisi(0); // ESKİ
+    setAktifMasaOzetleri([]); // YENİ
   };
 
   const filtrelenmisSiparisler = orders.filter((o) => {
-    if (!o || typeof o !== "object") return false;
+    if (!o || typeof o !== "object") return false; // Güvenlik kontrolü
     const aramaLower = arama.toLowerCase();
     let sepetText = "";
+    // Sepet parse etme mantığı
     if (Array.isArray(o.sepet)) {
       sepetText = o.sepet
         .map(
@@ -449,9 +462,10 @@ function AdminPaneli() {
               ? `${item.adet || "?"}x ${item.urun || "?"}`
               : ""
         )
-        .filter(Boolean)
+        .filter(Boolean) // Boş stringleri kaldır
         .join(" ");
-    } else if (typeof o.sepet === "string" && o.sepet.trim()) {
+    } else if (typeof o.sepet === "string" && o.sepet.trim() && o.sepet !== "[]") {
+      // String sepeti parse etmeyi dene
       try {
         const parsedSepet = JSON.parse(o.sepet);
         if (Array.isArray(parsedSepet)) {
@@ -465,22 +479,27 @@ function AdminPaneli() {
             .filter(Boolean)
             .join(" ");
         } else {
-          sepetText = o.sepet;
+          sepetText = o.sepet; // Eğer parse sonuç dizi değilse, ham string'i kullan
         }
       } catch (e) {
-        sepetText = o.sepet;
+        sepetText = o.sepet; // Parse hatası olursa ham string'i kullan
+        // logWarn(`Sipariş ${o.id} için sepet parse edilemedi (filtrelenmisSiparisler): ${o.sepet}`);
       }
     }
 
+
     const aranacakMetin = [
-      String(o.id || ""),
-      String(o.masa || ""),
+      String(o.id || ""), // ID varsa string'e çevir
+      String(o.masa || ""), // Masa varsa string'e çevir
       o.durum || "",
       o.istek || "",
       o.yanit || "",
       sepetText,
       o.zaman
-        ? new Date(o.zaman).toLocaleString("tr-TR")
+        ? new Date(o.zaman).toLocaleString("tr-TR", { // Zaman formatı güncellendi
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          })
         : "",
     ]
       .join(" ")
@@ -494,7 +513,7 @@ function AdminPaneli() {
         <div className="bg-white shadow-xl p-8 rounded-lg text-center border border-red-300 max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-4 text-red-700">Admin Girişi</h2>
-          {loading ? (
+          {loading && !error ? ( // Sadece loading varsa ve hata yoksa "Giriş deneniyor" göster
             <p className="text-gray-600 mb-4 animate-pulse">Giriş deneniyor...</p>
           ) : (
             <>
@@ -556,7 +575,7 @@ function AdminPaneli() {
           <strong className="font-bold">Hata: </strong>
           <span className="block sm:inline mr-2">{error}</span>
           <button
-            onClick={() => verileriGetir(true)}
+            onClick={() => verileriGetir(true)} // Hata durumunda verileri yeniden getirmeyi dene
             className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition duration-200 ease-in-out ml-4"
             disabled={loading}
           >
@@ -565,7 +584,7 @@ function AdminPaneli() {
         </div>
       )}
 
-      {loading && (
+      {loading && ( // Global loading indicator
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
           <p className="text-white text-lg ml-4">Yükleniyor...</p>
@@ -599,10 +618,10 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-green-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
-            ₺ Günlük Gelir
+            <DollarSign className="w-5 h-5 text-green-500" /> Günlük Gelir (Ödendi)
           </h3>
           <CountUp
-            end={gunluk?.toplam_gelir || 0}
+            end={gunluk?.toplam_gelir || 0} // Backend'den 'toplam_gelir' olarak geliyor
             separator="."
             decimal=","
             decimals={2}
@@ -612,10 +631,10 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-purple-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
-            <UserCheck className="w-5 h-5 text-purple-500" /> Aktif Masalar
+            <UserCheck className="w-5 h-5 text-purple-500" /> Aktif Masa Sayısı (Ödenmemiş)
           </h3>
           <CountUp
-            end={aktifMasaSayisi || 0}
+            end={aktifMasaOzetleri?.length || 0} // YENİ: aktifMasaOzetleri listesinin uzunluğu
             separator="."
             className="text-3xl font-bold text-purple-700 block"
           />
@@ -639,39 +658,89 @@ function AdminPaneli() {
           )}
         </div>
       </div>
+      
+      {/* YENİ: Aktif Masalar ve Ödenmemiş Tutarları Tablosu */}
+      <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
+        <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center gap-2">
+            <ListChecks className="w-6 h-6 text-purple-600" /> Aktif Masalar ve Ödenmemiş Tutarları
+        </h3>
+        {loading && (!aktifMasaOzetleri || aktifMasaOzetleri.length === 0) ? ( 
+             <div className="text-center py-10 text-gray-400 italic">Aktif masa verileri yükleniyor...</div>
+        ) : !aktifMasaOzetleri || aktifMasaOzetleri.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">Şu anda aktif (ödenmemiş siparişi olan) masa bulunmamaktadır.</div>
+        ) : (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-md">
+                    <thead className="bg-purple-100">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase tracking-wider">Masa ID</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase tracking-wider">Aktif Sipariş Sayısı</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase tracking-wider">Ödenmemiş Toplam Tutar (TL)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {aktifMasaOzetleri.map((masa) => (
+                            <tr key={masa.masa_id} className="hover:bg-purple-50 text-sm transition-colors">
+                                <td className="px-4 py-3 whitespace-nowrap text-gray-700 font-medium">{masa.masa_id}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-gray-600">{masa.aktif_siparis_sayisi}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-gray-800 font-semibold text-right">
+                                    {typeof masa.odenmemis_tutar === 'number' ? masa.odenmemis_tutar.toFixed(2) : 'N/A'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )}
+      </div>
 
       {/* Grafikler */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">
-            📈 Aylık Satılan Ürün Adedi (Yıllık Kırılım)
+            📈 Aylık Ciro ve Ürün Adedi (Yıllık Kırılım)
           </h3>
           <div className="h-64">
             {yillikChartData?.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={yillikChartData}
-                  margin={{ top: 5, right: 25, left: -10, bottom: 5 }}
+                  margin={{ top: 5, right: 35, left: -10, bottom: 5 }} // Sol marjı artırdık
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                   <XAxis
                     dataKey="tarih"
                     fontSize={12}
-                    tickFormatter={(value) => value.substring(5)}
+                    tickFormatter={(value) => value.substring(5)} // Sadece Ay-Gün gösterimi
                   />
-                  <YAxis fontSize={12} allowDecimals={false} />
+                  <YAxis yAxisId="left" label={{ value: 'Adet', angle: -90, position: 'insideLeft', offset: 0, fontSize: 11 }} fontSize={12} allowDecimals={false} />
+                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Ciro (₺)', angle: -90, position: 'insideRight', offset: -15, fontSize: 11 }} fontSize={12}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} 
+                  />
                   <Tooltip
-                    formatter={(value, name, props) => [
-                      `${value} Adet`,
-                      `Dönem: ${props.payload.tarih}`,
-                    ]}
+                    formatter={(value, name, props) => {
+                      if (name === "Aylık Ürün Adedi") return [`${value} Adet`, `Dönem: ${props.payload.tarih}`];
+                      if (name === "Aylık Ciro") return [`₺${value.toFixed(2)}`, `Dönem: ${props.payload.tarih}`];
+                      return [value, name];
+                    }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{fontSize: "12px"}}/>
                   <Line
+                    yAxisId="left"
                     type="monotone"
                     dataKey="adet"
                     name="Aylık Ürün Adedi"
-                    stroke="#4F46E5"
+                    stroke="#4F46E5" // Indigo
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="gelir"
+                    name="Aylık Ciro"
+                    stroke="#22C55E" // Green
                     strokeWidth={2}
                     dot={{ r: 4 }}
                     activeDot={{ r: 6 }}
@@ -695,7 +764,7 @@ function AdminPaneli() {
                 <BarChart
                   data={populer.slice(0, 5)}
                   layout="vertical"
-                  margin={{ top: 5, right: 30, left: 50, bottom: 5 }}
+                  margin={{ top: 5, right: 30, left: 60, bottom: 5 }} // Sol marjı artırdık
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                   <XAxis type="number" fontSize={12} allowDecimals={false} />
@@ -703,11 +772,12 @@ function AdminPaneli() {
                     dataKey="urun"
                     type="category"
                     fontSize={12}
-                    width={120}
-                    tick={{ textAnchor: "end", width: 115, fontSize: "11px" }}
+                    width={130} // Genişlik artırıldı
+                    tick={{ textAnchor: "end", width: 125, fontSize: "11px" }} // Genişlik artırıldı
                     interval={0}
                   />
                   <Tooltip formatter={(value) => [`${value} Adet`, "Satış Adedi"]} />
+                  <Legend wrapperStyle={{fontSize: "12px"}}/>
                   <Bar dataKey="adet" name="Satış Adedi" fill="#FB923C" barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
@@ -886,7 +956,7 @@ function AdminPaneli() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {loading && (!orders || orders.length === 0) && (
+              {loading && (!filtrelenmisSiparisler || filtrelenmisSiparisler.length === 0) && (!arama && orders.length === 0) && ( // Sadece ilk yüklemede ve arama yokken göster
                 <tr>
                   <td colSpan="5" className="text-center py-10 text-gray-400 italic">Siparişler yükleniyor...</td>
                 </tr>
@@ -935,6 +1005,13 @@ function AdminPaneli() {
                   }
                 }
                 const fullText = `${sepetDetay}${siparis.istek ? ` | Not: ${siparis.istek}` : ""}`;
+                const durumText = siparis.durum ? siparis.durum.charAt(0).toUpperCase() + siparis.durum.slice(1) : "Bilinmiyor";
+                let durumClass = "bg-yellow-100 text-yellow-800"; // Varsayılan (bekliyor için)
+                if (siparis.durum === "hazir") durumClass = "bg-green-100 text-green-800";
+                else if (siparis.durum === "hazirlaniyor") durumClass = "bg-blue-100 text-blue-800";
+                else if (siparis.durum === "iptal") durumClass = "bg-red-100 text-red-800 line-through opacity-70";
+                else if (siparis.durum === "odendi") durumClass = "bg-purple-100 text-purple-800";
+
 
                 return (
                   <tr key={siparis.id} className="hover:bg-slate-50 text-sm transition-colors">
@@ -951,18 +1028,8 @@ function AdminPaneli() {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full leading-tight ${
-                        siparis.durum === "hazir"
-                          ? "bg-green-100 text-green-800"
-                          : siparis.durum === "hazirlaniyor"
-                          ? "bg-blue-100 text-blue-800"
-                          : siparis.durum === "iptal"
-                          ? "bg-red-100 text-red-800 line-through opacity-70"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}>
-                        {siparis.durum
-                          ? siparis.durum.charAt(0).toUpperCase() + siparis.durum.slice(1)
-                          : "Bilinmiyor"}
+                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full leading-tight ${durumClass}`}>
+                        {durumText}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-500">
