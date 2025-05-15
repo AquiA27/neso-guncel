@@ -5,6 +5,7 @@ import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
 import Home from "./pages/Home";
+import KasaEkrani from "./pages/KasaEkrani"; // <-- 1. KasaEkrani component'ini import edin
 import "./index.css";
 
 function App() {
@@ -22,6 +23,9 @@ function App() {
 
         {/* Mutfak ekranı */}
         <Route path="/mutfak" element={<MutfakEkrani />} />
+
+        {/* Kasa ekranı */}
+        <Route path="/kasa" element={<KasaEkrani />} /> {/* <-- 2. Kasa Ekranı için Route ekleyin */}
 
         {/* Admin ekranı */}
         <Route path="/admin" element={<AdminPaneli />} />
