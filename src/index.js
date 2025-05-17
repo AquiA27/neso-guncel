@@ -1,17 +1,18 @@
+// Düzeltilmiş src/index.js yapısı
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom"; // BrowserRouter'ı import edin
 import App from "./App";
 import "./index.css";
-// AuthProvider'ı AuthContext.js dosyasından import ediyoruz
-// Eğer AuthContext.js doğrudan src klasöründeyse bu yol doğrudur.
-import { AuthProvider } from "./AuthContext";
+import { AuthProvider } from "./AuthContext"; // AuthContext'i import edin
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
-    {/* Uygulamamızı AuthProvider ile sarıyoruz */}
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <BrowserRouter> {/* BrowserRouter en dışta (veya üste yakın) olmalı */}
+      <AuthProvider> {/* AuthProvider, BrowserRouter'ın içinde olmalı */}
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>
 );
