@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 // import axios from "axios"; // KALDIRILDI (apiClient kullanılacak)
 import apiClient from '../services/apiClient'; // GÜNCELLENDİ: apiClient import edildi
-import { AuthContext } from '../context/AuthContext'; // GÜNCELLENDİ: AuthContext import edildi
+import { AuthContext } from '../AuthContext'; // GÜNCELLENDİ: AuthContext import edildi
 import { useNavigate } from 'react-router-dom'; // GÜNCELLENDİ: Yönlendirme için
 
 // const API_BASE = process.env.REACT_APP_API_BASE || ""; // KALDIRILDI (apiClient içinde)

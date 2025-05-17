@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext } from 'react'; // useContext ek
 import axios from 'axios'; // Sadece /token isteği için, diğerleri apiClient ile
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import NesoLogo from '../NesoLogo.svg';
-import { AuthContext } from '../context/AuthContext'; // AuthContext import edildi
+import { AuthContext } from '../AuthContext'; // AuthContext import edildi
 import apiClient from '../services/apiClient'; // apiClient import edildi
 
 const API_BASE = process.env.REACT_APP_API_BASE;

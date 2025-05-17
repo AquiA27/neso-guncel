@@ -1,16 +1,16 @@
 // src/App.js
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { AuthProvider, AuthContext } from "./context/AuthContext"; // AuthProvider import edildi
-import ProtectedRoute from "./components/ProtectedRoute"; // ProtectedRoute import edildi
-
+import { AuthProvider, AuthContext } from "./AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { Link } from 'react-router-dom';
 import MasaAsistani from "./pages/MasaAsistani";
 import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
 import Home from "./pages/Home";
 import KasaEkrani from "./pages/KasaEkrani";
-import Login from "./pages/Login"; // Login komponenti import edildi
+import Login from "./pages/Login"; 
 import "./index.css";
 
 // Basit bir Layout componenti (isteğe bağlı, navigasyon vb. için)

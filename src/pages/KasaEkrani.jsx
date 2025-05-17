@@ -2,13 +2,9 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from "react"; // useContext eklendi
 // import axios from "axios"; // KALDIRILDI (apiClient kullanılacak)
 import apiClient from '../services/apiClient'; // GÜNCELLENDİ: apiClient import edildi
-import { AuthContext } from '../context/AuthContext'; // GÜNCELLENDİ: AuthContext import edildi
+import { AuthContext } from '../AuthContext'; // GÜNCELLENDİ: AuthContext import edildi
 import { useNavigate } from 'react-router-dom'; // GÜNCELLENDİ: Yönlendirme için
-
-// const API_BASE = process.env.REACT_APP_API_BASE; // KALDIRILDI (apiClient içinde)
-// const ADMIN_USERNAME = process.env.REACT_APP_ADMIN_USERNAME || "admin"; // KALDIRILDI
-// const ADMIN_PASSWORD = process.env.REACT_APP_ADMIN_PASSWORD || "admin123"; // KALDIRILDI
-// const AUTH_HEADER = "Basic " + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`); // KALDIRILDI
+import { AlertCircle, RotateCw } from 'lucide-react';
 
 function KasaEkrani() {
   const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext); // GÜNCELLENDİ
