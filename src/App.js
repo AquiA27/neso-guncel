@@ -1,25 +1,26 @@
 // src/App.js
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { AuthProvider, AuthContext } from "./AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
-import { Link } from 'react-router-dom';
+// BrowserRouter as Router'ı buradan kaldırıyoruz.
+import { Routes, Route, Outlet, Link } from "react-router-dom"; // Navigate'i kullanmıyorsanız kaldırabilirsiniz.
+// AuthProvider'ı buradan kaldırıyoruz, AuthContext kalabilir çünkü Layout kullanıyor.
+import { AuthContext } from "./AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute"; // Yolunu bir önceki adıma göre düzeltmiştiniz, doğru olduğunu varsayıyorum.
+
 import MasaAsistani from "./pages/MasaAsistani";
 import MutfakEkrani from "./pages/MutfakEkrani";
 import AdminPaneli from "./pages/AdminPaneli";
 import MenuGoruntule from "./pages/MenuGoruntule";
 import Home from "./pages/Home";
 import KasaEkrani from "./pages/KasaEkrani";
-import Login from "./pages/Login"; 
+import Login from "./pages/Login";
 import "./index.css";
 
-// Basit bir Layout componenti (isteğe bağlı, navigasyon vb. için)
+// Layout componentiniz aynı kalabilir, AuthContext'i index.js'deki AuthProvider'dan alacaktır.
 const Layout = () => {
   const { isAuthenticated, logout, currentUser } = React.useContext(AuthContext);
 
   return (
     <div>
-      {/* İsteğe bağlı global navigasyon veya header buraya eklenebilir */}
       {isAuthenticated && (
         <header className="bg-slate-800 text-white p-3 flex justify-between items-center">
           <span>Hoş geldiniz, {currentUser?.kullanici_adi || 'Kullanıcı'} ({currentUser?.rol})</span>
@@ -38,7 +39,7 @@ const Layout = () => {
   );
 };
 
-// Yetkisiz erişim için basit bir sayfa
+// UnauthorizedPage componentiniz aynı kalabilir
 const UnauthorizedPage = () => (
     <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
         <h1 className="text-3xl font-bold text-red-600 mb-4">Yetkisiz Erişim</h1>
@@ -50,66 +51,57 @@ const UnauthorizedPage = () => (
 
 function App() {
   return (
-    <AuthProvider> {/* AuthProvider ile tüm uygulamayı sarmalıyoruz */}
-      <Router>
-        <Routes>
-          <Route element={<Layout />}> {/* Layout tüm sayfalara uygulanabilir */}
-            {/* Herkesin erişebileceği yollar */}
-            <Route path="/" element={<Home />} />
-            <Route path="/masa/:masaId" element={<MasaAsistani />} />
-            <Route path="/menu" element={<MenuGoruntule />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+    // AuthProvider ve Router sarmalayıcılarını buradan kaldırıyoruz.
+    // Doğrudan Routes ile başlıyoruz.
+    <Routes>
+      <Route element={<Layout />}> {/* Layout tüm sayfalara uygulanabilir */}
+        {/* Herkesin erişebileceği yollar */}
+        <Route path="/" element={<Home />} />
+        <Route path="/masa/:masaId" element={<MasaAsistani />} />
+        <Route path="/menu" element={<MenuGoruntule />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
+        {/* Korumalı Yollar */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminPaneli />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mutfak"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'mutfak_personeli', 'barista']}>
+              <MutfakEkrani />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/kasa"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'kasiyer']}>
+              <KasaEkrani />
+            </ProtectedRoute>
+          }
+        />
 
-            {/* Korumalı Yollar */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminPaneli />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/mutfak"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'mutfak_personeli', 'barista']}>
-                  <MutfakEkrani />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/kasa"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'kasiyer']}>
-                  <KasaEkrani />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* 404 - Sayfa bulunamadı */}
-            <Route
-              path="*"
-              element={
-                <div className="min-h-screen bg-gradient-to-br from-red-500 via-pink-500 to-yellow-500 flex items-center justify-center px-4">
-                  <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-10 rounded-2xl text-center text-white shadow-2xl max-w-md">
-                    <h2 className="text-4xl font-bold animate-bounce mb-4">🚫 404</h2>
-                    <h3 className="text-xl font-semibold mb-2">Sayfa Bulunamadı</h3>
-                    <p className="opacity-80">
-                      Aradığınız sayfa mevcut değil.
-                    </p>
-                    <Link to="/" className="mt-4 inline-block bg-white text-pink-500 px-4 py-2 rounded-lg font-semibold hover:bg-opacity-90 transition">
-                        Ana Sayfaya Dön
-                    </Link>
-                  </div>
-                </div>
-              }
-            />
-          </Route>
-        </Routes>
-      </Router>
-    </AuthProvider>
+        {/* 404 - Sayfa bulunamadı */}
+        <Route
+          path="*"
+          element={
+            <div className="min-h-screen bg-gradient-to-br from-red-500 via-pink-500 to-yellow-500 flex items-center justify-center px-4">
+              {/* ... 404 içeriği ... */}
+              <Link to="/" className="mt-4 inline-block bg-white text-pink-500 px-4 py-2 rounded-lg font-semibold hover:bg-opacity-90 transition">
+                Ana Sayfaya Dön
+              </Link>
+            </div>
+          }
+        />
+      </Route>
+    </Routes>
   );
 }
 
