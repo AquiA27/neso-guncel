@@ -1,10 +1,10 @@
 // src/pages/Login.jsx
-import React, { useState, useEffect, useContext } from 'react'; // useContext eklendi
-import axios from 'axios'; // Sadece /token isteği için, diğerleri apiClient ile
+import React, { useState, useEffect, useContext } from 'react';
+import axios from 'axios';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import NesoLogo from '../NesoLogo.svg';
-import { AuthContext } from '../AuthContext'; // AuthContext import edildi
-import apiClient from '../services/apiClient'; // apiClient import edildi
+import { AuthContext } from '../AuthContext';
+import apiClient from '../services/apiClient';
 
 const API_BASE = process.env.REACT_APP_API_BASE;
 
@@ -15,21 +15,18 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, userRole } = useContext(AuthContext); // AuthContext'ten fonksiyonlar ve durumlar alındı
+  const { login, isAuthenticated, userRole } = useContext(AuthContext);
 
   const from = location.state?.from?.pathname || "/";
 
   useEffect(() => {
     document.title = "Giriş Yap - Neso Asistan";
-    if (isAuthenticated) { // AuthContext'ten gelen isAuthenticated durumu kontrol ediliyor
-      // Rolüne göre yönlendirme AuthContext veya App.js içinde yapılabilir.
-      // Şimdilik burada temel bir yönlendirme bırakalım.
-      // Daha merkezi bir yönlendirme için App.js'deki ProtectedRoute'a güvenebiliriz.
+    if (isAuthenticated) {
       console.log("Login.jsx: Zaten giriş yapılmış, rol:", userRole, "Yönlendiriliyor:", from);
       if (userRole === 'admin') navigate('/admin', { replace: true });
       else if (userRole === 'kasiyer') navigate('/kasa', { replace: true });
       else if (userRole === 'mutfak_personeli' || userRole === 'barista') navigate('/mutfak', { replace: true });
-      else navigate(from === '/login' ? '/' : from , { replace: true }); // Eğer from login ise ana sayfaya
+      else navigate(from === '/login' ? '/' : from , { replace: true });
     }
   }, [isAuthenticated, navigate, from, userRole]);
 
@@ -49,32 +46,18 @@ function Login() {
       formData.append('username', kullaniciAdi);
       formData.append('password', sifre);
 
-      // /token isteği için doğrudan axios kullanıyoruz çünkü henüz apiClient interceptor'ı (eğer token yoksa) devreye girmeyebilir.
-      // Ya da apiClient'ı /token isteği için de kullanabiliriz, interceptor token yoksa bir şey yapmayacaktır.
-      // Şimdilik doğrudan axios ile devam edelim.
       const response = await axios.post(`${API_BASE}/token`, formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       if (response.data.access_token) {
         const token = response.data.access_token;
-        // AuthContext üzerinden login fonksiyonunu çağırıyoruz.
-        // Bu fonksiyon token'ı ve kullanıcı detaylarını alıp state'i güncelleyecek.
-        const loginSuccess = await login(token); // login fonksiyonu AuthContext'te tanımlanacak
+        const loginSuccess = await login(token);
 
         if (loginSuccess && loginSuccess.rol) {
-          // Yönlendirme AuthContext'teki useEffect veya buradaki useEffect ile yapılabilir.
-          // login fonksiyonu başarılı olursa, yukarıdaki useEffect zaten yönlendirmeyi tetikleyecektir.
-          // İsteğe bağlı olarak burada da spesifik bir yönlendirme yapılabilir.
-          // Örneğin:
-          // switch (loginSuccess.rol) {
-          //   case 'admin': navigate('/admin', { replace: true }); break;
-          //   case 'kasiyer': navigate('/kasa', { replace: true }); break;
-          //   // ... diğer roller
-          //   default: navigate(from === '/login' ? '/' : from, { replace: true });
-          // }
+          // Yönlendirme useEffect ile zaten yapılacak
         } else if (!loginSuccess) {
-            setError(loginSuccess.error || 'Giriş başarılı ancak kullanıcı detayları alınamadı veya rol bulunamadı.');
+          setError(loginSuccess.error || 'Giriş başarılı ancak kullanıcı detayları alınamadı veya rol bulunamadı.');
         }
       } else {
         setError('Giriş başarısız. Token alınamadı.');
@@ -83,9 +66,10 @@ function Login() {
       console.error("Giriş hatası:", err);
       if (err.response) {
         if (err.response.status === 401) {
-          setError('Kullanıcı adı veya şifre hatalı.');
-        } else if (err.response.status === 400 && err.response.data?.detail?.toLowerCase().includes("pasif kullanıcı") ) {
-            setError('Hesabınız aktif değil. Lütfen yönetici ile iletişime geçin.');
+          // Backend'den gelen hata mesajını daha iyi kullan
+          setError(err.response.data?.detail || 'Kullanıcı adı veya şifre hatalı.');
+        } else if (err.response.status === 400 && err.response.data?.detail?.toLowerCase().includes("pasif kullanıcı")) {
+          setError('Hesabınız aktif değil. Lütfen yönetici ile iletişime geçin.');
         } else {
           setError(err.response.data?.detail || 'Giriş sırasında bir hata oluştu.');
         }
@@ -99,16 +83,14 @@ function Login() {
     }
   };
 
-  // Eğer zaten giriş yapılmışsa bu sayfanın içeriğini göstermeyebiliriz veya farklı bir mesaj gösterebiliriz.
-  // Bu kontrol yukarıdaki useEffect ile zaten yapılıyor ve yönlendirme sağlanıyor.
   if (isAuthenticated && !loading) {
-      return (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-sky-100 p-4">
-              <img src={NesoLogo} alt="Neso Asistan Logo" className="h-20 w-20 mx-auto mb-6" />
-              <p className="text-slate-700 text-lg mb-4">Zaten giriş yaptınız.</p>
-              <Link to="/" className="text-sky-600 hover:text-sky-700 font-semibold">Ana Sayfaya Dön</Link>
-          </div>
-      );
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-sky-100 p-4">
+        <img src={NesoLogo} alt="Neso Asistan Logo" className="h-20 w-20 mx-auto mb-6" />
+        <p className="text-slate-700 text-lg mb-4">Zaten giriş yaptınız.</p>
+        <Link to="/" className="text-sky-600 hover:text-sky-700 font-semibold">Ana Sayfaya Dön</Link>
+      </div>
+    );
   }
 
   return (
@@ -176,7 +158,7 @@ function Login() {
           </button>
         </form>
         <p className="text-xs text-slate-400 mt-6">
-          Fıstık Kafe &copy; {new Date().getFullYear()}
+          Fıstık Kafe © {new Date().getFullYear()}
         </p>
       </div>
     </div>
