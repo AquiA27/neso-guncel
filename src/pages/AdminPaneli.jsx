@@ -513,7 +513,7 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-green-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
-            <DollarSign className="w-5 h-5 text-green-500" /> Günlük Gelir (Ödendi)
+            <DollarSign className="w-5 h-5 text-green-500" /> Günlük Gelir
           </h3>
           <CountUp
             end={gunluk?.toplam_gelir || 0}
@@ -526,7 +526,7 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-purple-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
-            <UserCheck className="w-5 h-5 text-purple-500" /> Aktif Masa Sayısı (Ödenmemiş)
+            <UserCheck className="w-5 h-5 text-purple-500" /> Aktif Masa Sayısı
           </h3>
           <CountUp
             end={aktifMasaOzetleri?.length || 0}
@@ -536,7 +536,7 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-orange-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
-            🏆 En Çok Satan
+            🏆 En Çok Tercih Edilen Ürün
           </h3>
           {populer?.[0] ? (
             <p
@@ -651,7 +651,7 @@ function AdminPaneli() {
         </div>
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">
-            📊 En Çok Satan 5 Ürün (Adet)
+            📊 En Çok Tercih Edilen 5 Ürün (Adet)
           </h3>
           <div className="h-64">
             {populer?.length > 0 ? (
