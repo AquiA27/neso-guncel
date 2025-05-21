@@ -16,7 +16,6 @@ import CountUp from "react-countup";
 import {
   UserCheck,
   Coffee,
-  // TrendingUp, // Kullanılmıyorsa yorum satırı veya kaldırılabilir
   Settings,
   LogOut,
   AlertCircle,
@@ -24,29 +23,20 @@ import {
   Trash2,
   PlusCircle,
   RotateCw,
-  DollarSign, // İkon
-  ListChecks, // Yeni ikon
+  DollarSign, 
+  ListChecks, 
+  CreditCard as CreditCardIcon, // Ödeme Yöntemi için ikon
 } from "lucide-react";
-// import axios from "axios"; // KALDIRILDI (apiClient kullanılacak)
-import apiClient from '../services/apiClient'; // GÜNCELLENDİ: apiClient import edildi
-import { AuthContext } from '../AuthContext'; // GÜNCELLENDİ: AuthContext import edildi
-import { useNavigate } from 'react-router-dom'; // GÜNCELLENDİ: Yönlendirme için
-
-// const API_BASE = process.env.REACT_APP_API_BASE || ""; // KALDIRILDI (apiClient içinde)
-// const ADMIN_USERNAME = process.env.REACT_APP_ADMIN_USERNAME || "admin"; // KALDIRILDI
-// const ADMIN_PASSWORD = process.env.REACT_APP_ADMIN_PASSWORD || "admin123"; // KALDIRILDI
+import apiClient from '../services/apiClient'; 
+import { AuthContext } from '../AuthContext'; 
+import { useNavigate } from 'react-router-dom'; 
 
 function AdminPaneli() {
-  const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext); // GÜNCELLENDİ
-  const navigate = useNavigate(); // GÜNCELLENDİ
+  const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext); 
+  const navigate = useNavigate(); 
 
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
-  // const [isLoggedIn, setIsLoggedIn] = useState( // KALDIRILDI (AuthContext'ten isAuthenticated kullanılacak)
-  //   () =>
-  //     typeof window !== "undefined" &&
-  //     localStorage.getItem("adminGiris") === "true"
-  // );
   const [gunluk, setGunluk] = useState({
     siparis_sayisi: 0,
     toplam_gelir: 0,
@@ -68,11 +58,7 @@ function AdminPaneli() {
   });
   const [silUrunAdi, setSilUrunAdi] = useState("");
   const [error, setError] = useState(null);
-  const [loadingData, setLoadingData] = useState(false); // GÜNCELLENDİ: loading -> loadingData
-  // const [loginCredentials, setLoginCredentials] = useState({ // KALDIRILDI (Login.jsx'te)
-  //   username: "",
-  //   password: "",
-  // });
+  const [loadingData, setLoadingData] = useState(false);
   const wsRef = useRef(null);
 
   const logInfo = useCallback((message) => console.log(`[Admin Paneli] INFO: ${message}`), []);
@@ -89,24 +75,11 @@ function AdminPaneli() {
   }, []);
 
   const verileriGetir = useCallback(async () => {
-    // GÜNCELLENDİ: Bu fonksiyon artık sadece yetkili kullanıcı (admin) tarafından çağrılacak.
-    // AuthContext'ten gelen `isAuthenticated` ve `userRole` zaten bu kontrolü sağlayacak.
     logInfo(`🔄 Veriler getiriliyor (Admin)...`);
     setLoadingData(true);
     setError(null);
 
-    // const API_BASE_URL = process.env.REACT_APP_API_BASE || ""; // apiClient içinde zaten var
-    // if (!API_BASE_URL) { // Bu kontrol apiClient içinde veya AuthContext'te yapılabilir
-    //   logError("API_BASE tanımlı değil.");
-    //   setError("API adresi yapılandırılmamış. Lütfen yöneticiyle iletişime geçin.");
-    //   setLoadingData(false);
-    //   return;
-    // }
-
     try {
-      // GÜNCELLENDİ: Basic Auth header'ları kaldırıldı, apiClient token'ı otomatik ekleyecek.
-      // const headers = { Authorization: "Basic " + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`) }; // KALDIRILDI
-
       const [
         siparisRes,
         gunlukRes,
@@ -116,17 +89,14 @@ function AdminPaneli() {
         aktifMasalarTutarlariRes,
         menuRes,
       ] = await Promise.all([
-        apiClient.get(`/siparisler`), // apiClient kullanıldı
+        apiClient.get(`/siparisler`), 
         apiClient.get(`/istatistik/gunluk`),
         apiClient.get(`/istatistik/aylik`),
         apiClient.get(`/istatistik/yillik-aylik-kirilim`),
         apiClient.get(`/istatistik/en-cok-satilan`),
-        apiClient.get(`/admin/aktif-masa-tutarlari`), // Bu endpoint backend'de admin yetkisi gerektiriyor
-        apiClient.get(`/menu`), // Menü herkes tarafından görülebilir ama admin panelinde de kullanılıyor
+        apiClient.get(`/admin/aktif-masa-tutarlari`), 
+        apiClient.get(`/menu`), 
       ]);
-
-      // localStorage.setItem("adminGiris", "true"); // Bu artık AuthContext ve Login.jsx'te yönetiliyor.
-      // setIsLoggedIn(true); // Bu da AuthContext'ten yönetiliyor.
 
       setOrders(siparisRes?.data?.orders || []);
       setGunluk(
@@ -156,9 +126,7 @@ function AdminPaneli() {
         err.response?.data?.detail || err.message || "Bilinmeyen bir hata oluştu.";
       if (err.response?.status === 401 || err.response?.status === 403) {
         setError("Bu verilere erişim yetkiniz yok veya oturumunuz sonlanmış. Lütfen tekrar giriş yapın.");
-        // localStorage.removeItem("adminGiris"); // AuthContext'teki logout halledecek
-        // setIsLoggedIn(false); // AuthContext halledecek
-        logout(); // GÜNCELLENDİ: Yetkisiz ise çıkış yaptır
+        logout(); 
       } else {
         setError(
           `Veriler alınamadı: ${errorDetail} (URL: ${err.config?.url || "Bilinmiyor"})`
@@ -167,11 +135,10 @@ function AdminPaneli() {
     } finally {
       setLoadingData(false);
     }
-  }, [logInfo, logError, logout]); // logout eklendi
+  }, [logInfo, logError, logout]); 
 
-  // GÜNCELLENDİ: Auth durumu kontrolü ve ilk veri çekme
   useEffect(() => {
-    if (!loadingAuth) { // AuthContext'ten gelen yükleme durumu bittikten sonra
+    if (!loadingAuth) { 
       if (isAuthenticated && userRole === 'admin') {
         logInfo("Admin giriş yapmış ve yetkili, veriler çekiliyor...");
         verileriGetir();
@@ -180,16 +147,11 @@ function AdminPaneli() {
         navigate('/unauthorized');
       } else if (!isAuthenticated) {
         logWarn("Giriş yapılmamış, admin paneli için login'e yönlendiriliyor.");
-        // Login sayfasına yönlendirirken, başarılı giriş sonrası geri dönülecek yolu state ile gönder
         navigate('/login', { state: { from: { pathname: '/admin' } } });
       }
     }
   }, [isAuthenticated, userRole, loadingAuth, navigate, verileriGetir, logInfo, logWarn]);
 
-
-  // const handleLogin = async (e) => { ... }; // KALDIRILDI (Login.jsx'e taşındı)
-
-  // GÜNCELLENDİ: WebSocket Bağlantısı (Sadece giriş yapmış ve admin rolüne sahip kullanıcı için)
   useEffect(() => {
     if (!isAuthenticated || userRole !== 'admin' || loadingAuth) {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -197,7 +159,7 @@ function AdminPaneli() {
         wsRef.current.close(1000, "User not admin or logged out for Admin WS");
         wsRef.current = null;
       }
-      return; // Eğer kullanıcı admin değilse veya auth yükleniyorsa WS kurma
+      return; 
     }
 
     let reconnectTimeoutId = null;
@@ -232,9 +194,12 @@ function AdminPaneli() {
           try {
             const message = JSON.parse(event.data);
             logInfo(`📥 Admin WS mesajı alındı: Tip: ${message.type}`);
+            // Ödeme yöntemi bilgisi 'durum' mesajı içinde gelebilir.
+            // 'verileriGetir' zaten en güncel listeyi çekeceği için
+            // burada ödeme yöntemini ayrıca işlemeye gerek yok, listeye yansıyacaktır.
             if (["siparis", "durum", "masa_durum", "menu_guncellendi"].includes(message.type)) {
               logInfo(`⚡ Admin WS: ${message.type} alındı, veriler yenileniyor...`);
-              verileriGetir();
+              verileriGetir(); 
             } else if (message.type === "pong") {
                 logDebug("Admin WS: Pong alındı.");
             }
@@ -296,7 +261,6 @@ function AdminPaneli() {
     logInfo(`➕ Ürün ekleniyor: ${JSON.stringify({ ...yeniUrun, fiyat: fiyatNum })}`);
     setLoadingData(true); setError(null);
     try {
-      // GÜNCELLENDİ: apiClient kullanıldı, Basic Auth header'ları kaldırıldı
       await apiClient.post(`/menu/ekle`, { ...yeniUrun, fiyat: fiyatNum });
       logInfo("✅ Ürün başarıyla eklendi.");
       setYeniUrun({ ad: "", fiyat: "", kategori: "" });
@@ -307,11 +271,11 @@ function AdminPaneli() {
       const errorDetail = err.response?.data?.detail || err.message || "Bilinmeyen bir hata.";
       setError(`Ürün eklenirken hata: ${errorDetail}`);
       alert(`Ürün eklenemedi: ${errorDetail}`);
-      if (err.response?.status === 401 || err.response?.status === 403) logout(); // GÜNCELLENDİ
+      if (err.response?.status === 401 || err.response?.status === 403) logout(); 
     } finally {
       setLoadingData(false);
     }
-  }, [yeniUrun, verileriGetir, logInfo, logError, logout]); // logout eklendi
+  }, [yeniUrun, verileriGetir, logInfo, logError, logout]); 
 
   const urunSil = useCallback(async () => {
     if (!silUrunAdi) { alert("Lütfen silinecek ürünün adını girin."); return; }
@@ -336,7 +300,6 @@ function AdminPaneli() {
     logInfo(`➖ Ürün siliniyor: ${urunAdiTrimmed}`);
     setLoadingData(true); setError(null);
     try {
-      // GÜNCELLENDİ: apiClient kullanıldı, Basic Auth header'ları kaldırıldı
       await apiClient.delete(`/menu/sil`, { params: { urun_adi: urunAdiTrimmed } });
       logInfo("🗑️ Ürün başarıyla silindi.");
       setSilUrunAdi("");
@@ -347,13 +310,11 @@ function AdminPaneli() {
       const errorDetail = err.response?.data?.detail || err.message || "Bilinmeyen bir hata.";
       setError(`Ürün silinirken hata: ${errorDetail}`);
       alert(`Ürün silinemedi: ${errorDetail}`);
-      if (err.response?.status === 401 || err.response?.status === 403) logout(); // GÜNCELLENDİ
+      if (err.response?.status === 401 || err.response?.status === 403) logout(); 
     } finally {
       setLoadingData(false);
     }
-  }, [silUrunAdi, menu, verileriGetir, logInfo, logError, logout]); // logout eklendi
-
-  // const cikisYap = () => { ... }; // KALDIRILDI (AuthContext'ten logout kullanılacak)
+  }, [silUrunAdi, menu, verileriGetir, logInfo, logError, logout]); 
 
   const filtrelenmisSiparisler = orders.filter((o) => {
     if (!o || typeof o !== "object") return false;
@@ -403,14 +364,14 @@ function AdminPaneli() {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
           })
         : "",
+      o.odeme_yontemi || "" // Ödeme yöntemi aramaya eklendi
     ]
       .join(" ")
       .toLowerCase();
     return aranacakMetin.includes(aramaLower);
   });
 
-  // GÜNCELLENDİ: Yükleme ve Yetki Kontrolü
-  if (loadingAuth) { // AuthContext'in yüklenmesini bekle
+  if (loadingAuth) { 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-sky-100 p-4">
         <div className="bg-white shadow-xl p-8 rounded-lg text-center border border-slate-300">
@@ -422,14 +383,8 @@ function AdminPaneli() {
     );
   }
 
-  // Eğer kullanıcı giriş yapmamışsa veya admin rolüne sahip değilse,
-  // App.js içindeki ProtectedRoute zaten bu sayfaya erişimi engelleyecektir.
-  // Bu nedenle, buraya ulaşıldığında kullanıcının admin olduğu varsayılabilir.
-  // Login formu bu component'ten kaldırıldı, Login.jsx'e taşındı.
-
   return (
     <div className="p-4 md:p-8 bg-gradient-to-tr from-slate-100 to-slate-200 min-h-screen text-gray-800 font-sans relative">
-      {/* Hata Mesajı Alanı */}
       {error && (
         <div
           className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded relative mb-6 shadow"
@@ -447,7 +402,6 @@ function AdminPaneli() {
         </div>
       )}
 
-      {/* Global Veri Yükleme Göstergesi */}
       {loadingData && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
@@ -455,21 +409,19 @@ function AdminPaneli() {
         </div>
       )}
 
-      {/* Başlık ve Çıkış Butonu */}
       <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
         <h1 className="text-3xl md:text-4xl font-bold text-gray-800 flex items-center gap-3">
           <Settings className="w-8 h-8 text-blue-600" /> Admin Paneli
           {currentUser && <span className="text-lg font-normal text-slate-500">({currentUser.kullanici_adi})</span>}
         </h1>
         <button
-          onClick={logout} // GÜNCELLENDİ: AuthContext'ten gelen logout
+          onClick={logout} 
           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg shadow-md flex items-center gap-2 transition duration-200 ease-in-out active:scale-95"
         >
           <LogOut className="w-4 h-4" /> Çıkış Yap
         </button>
       </div>
 
-      {/* İstatistik Kartları (Orijinal JSX yapısı korunuyor) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
@@ -524,7 +476,6 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Aktif Masalar ve Ödenmemiş Tutarları Tablosu (Orijinal JSX yapısı korunuyor) */}
       <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
         <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center gap-2">
             <ListChecks className="w-6 h-6 text-purple-600" /> Aktif Masalar
@@ -559,7 +510,6 @@ function AdminPaneli() {
         )}
       </div>
 
-      {/* Grafikler (Orijinal JSX yapısı korunuyor) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">
@@ -655,7 +605,6 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Menü Yönetimi (Orijinal JSX yapısı korunuyor) */}
       <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
         <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
           <MenuSquare className="w-5 h-5 text-teal-600" /> Menü Yönetimi
@@ -680,7 +629,7 @@ function AdminPaneli() {
                     }
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
                     required
-                    disabled={loadingData} // GÜNCELLENDİ
+                    disabled={loadingData} 
                   />
                   <input
                     type="number"
@@ -693,7 +642,7 @@ function AdminPaneli() {
                     step="0.01"
                     min="0"
                     required
-                    disabled={loadingData} // GÜNCELLENDİ
+                    disabled={loadingData} 
                   />
                   <input
                     type="text"
@@ -704,20 +653,20 @@ function AdminPaneli() {
                     }
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
                     required
-                    disabled={loadingData} // GÜNCELLENDİ
+                    disabled={loadingData} 
                   />
                   <button
                     type="submit"
                     disabled={
-                      loadingData || !yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori // GÜNCELLENDİ
+                      loadingData || !yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori 
                     }
                     className={`w-full text-white py-2 rounded shadow transition duration-200 ease-in-out active:scale-95 flex items-center justify-center gap-2 ${
-                      loadingData || !yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori // GÜNCELLENDİ
+                      loadingData || !yeniUrun.ad || !yeniUrun.fiyat || !yeniUrun.kategori 
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-teal-600 hover:bg-teal-700"
                     }`}
                   >
-                    {loadingData && yeniUrun.ad ? <RotateCw className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />} {/* GÜNCELLENDİ */}
+                    {loadingData && yeniUrun.ad ? <RotateCw className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />} 
                      Ürün Ekle
                   </button>
                 </div>
@@ -739,18 +688,18 @@ function AdminPaneli() {
                     onChange={(e) => setSilUrunAdi(e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
                     required
-                    disabled={loadingData} // GÜNCELLENDİ
+                    disabled={loadingData} 
                   />
                   <button
                     type="submit"
-                    disabled={!silUrunAdi.trim() || loadingData} // GÜNCELLENDİ
+                    disabled={!silUrunAdi.trim() || loadingData} 
                     className={`w-full text-white py-2 rounded shadow transition duration-200 ease-in-out active:scale-95 flex items-center justify-center gap-2 ${
-                      !silUrunAdi.trim() || loadingData // GÜNCELLENDİ
+                      !silUrunAdi.trim() || loadingData 
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-red-600 hover:bg-red-700"
                     }`}
                   >
-                     {loadingData && silUrunAdi.trim() ? <RotateCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} {/* GÜNCELLENDİ */}
+                     {loadingData && silUrunAdi.trim() ? <RotateCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} 
                     Ürün Sil
                   </button>
                 </div>
@@ -759,10 +708,10 @@ function AdminPaneli() {
           </div>
           <div className="md:col-span-2">
             <h4 className="font-medium mb-3 text-gray-600">Mevcut Menü</h4>
-            {loadingData && (!menu || menu.length === 0) && ( // GÜNCELLENDİ
+            {loadingData && (!menu || menu.length === 0) && ( 
               <div className="text-center py-10 text-gray-400 italic">Menü yükleniyor...</div>
             )}
-            {!loadingData && (!menu || menu.length === 0) && ( // GÜNCELLENDİ
+            {!loadingData && (!menu || menu.length === 0) && ( 
               <div className="text-center py-10 text-gray-500">Menü boş veya yüklenemedi. Lütfen bağlantıyı kontrol edin veya ürün ekleyin.</div>
             )}
             {menu?.length > 0 && (
@@ -802,12 +751,11 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Sipariş Geçmişi (Orijinal JSX yapısı korunuyor) */}
       <div className="bg-white p-6 rounded-lg shadow-lg">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">📋 Sipariş Geçmişi</h3>
         <input
           type="text"
-          placeholder="Sipariş Ara (ID, Masa, Durum, İçerik, Not, Tarih...)"
+          placeholder="Sipariş Ara (ID, Masa, Durum, İçerik, Not, Tarih, Ödeme Yöntemi...)"
           value={arama}
           onChange={(e) => setArama(e.target.value)}
           className="w-full p-3 border border-gray-300 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
@@ -820,18 +768,19 @@ function AdminPaneli() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Masa</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider min-w-[200px]">Sipariş İçeriği & Not</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Durum</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Ödeme Yöntemi</th> {/* YENİ SÜTUN BAŞLIĞI */}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Tarih</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {loadingData && (!filtrelenmisSiparisler || filtrelenmisSiparisler.length === 0) && (!arama && orders.length === 0) && ( // GÜNCELLENDİ
+              {loadingData && (!filtrelenmisSiparisler || filtrelenmisSiparisler.length === 0) && (!arama && orders.length === 0) && ( 
                 <tr>
-                  <td colSpan="5" className="text-center py-10 text-gray-400 italic">Siparişler yükleniyor...</td>
+                  <td colSpan="6" className="text-center py-10 text-gray-400 italic">Siparişler yükleniyor...</td> {/* Colspan 6 oldu */}
                 </tr>
               )}
-              {!loadingData && filtrelenmisSiparisler.length === 0 && ( // GÜNCELLENDİ
+              {!loadingData && filtrelenmisSiparisler.length === 0 && ( 
                 <tr>
-                  <td colSpan="5" className="text-center py-10 text-gray-500">
+                  <td colSpan="6" className="text-center py-10 text-gray-500"> {/* Colspan 6 oldu */}
                     {arama
                       ? "Aramanızla eşleşen sipariş bulunamadı."
                       : orders.length === 0
@@ -880,6 +829,11 @@ function AdminPaneli() {
                 else if (siparis.durum === "iptal") durumClass = "bg-red-100 text-red-800 line-through opacity-70";
                 else if (siparis.durum === "odendi") durumClass = "bg-purple-100 text-purple-800";
 
+                const odemeYontemiText = siparis.odeme_yontemi || "-"; // Ödeme yöntemi
+                let odemeYontemiClass = "text-gray-500";
+                if (siparis.odeme_yontemi === "Nakit") odemeYontemiClass = "text-green-700";
+                else if (siparis.odeme_yontemi === "Kredi Kartı") odemeYontemiClass = "text-blue-700";
+
 
                 return (
                   <tr key={siparis.id} className="hover:bg-slate-50 text-sm transition-colors">
@@ -900,6 +854,12 @@ function AdminPaneli() {
                         {durumText}
                       </span>
                     </td>
+                    {/* YENİ SÜTUN VERİSİ */}
+                    <td className={`px-4 py-3 whitespace-nowrap font-medium ${odemeYontemiClass}`}>
+                        {siparis.durum === "odendi" && siparis.odeme_yontemi === "Kredi Kartı" && <CreditCardIcon className="w-4 h-4 inline-block mr-1" />}
+                        {siparis.durum === "odendi" && siparis.odeme_yontemi === "Nakit" && <DollarSign className="w-4 h-4 inline-block mr-1" />}
+                        {odemeYontemiText}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-500">
                       {siparis.zaman
                         ? new Date(siparis.zaman).toLocaleString("tr-TR", {
@@ -919,7 +879,6 @@ function AdminPaneli() {
         </div>
       </div>
 
-      {/* Ayarlar Bölümü - GÜNCELLENDİ */}
       <div className="bg-white p-6 rounded-lg shadow-lg mt-8">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">⚙️ Ayarlar</h3>
         <div className="text-sm text-gray-600 space-y-2">
@@ -930,7 +889,6 @@ function AdminPaneli() {
               Mevcut Giriş Yapan Kullanıcı: <strong>{currentUser.kullanici_adi}</strong> (Rol: {currentUser.rol})
             </p>
           )}
-          {/* TODO: Buraya admin için kullanıcı yönetimi arayüzü eklenebilir. (Yeni kullanıcı ekleme, rol atama vb.) */}
         </div>
       </div>
     </div>
