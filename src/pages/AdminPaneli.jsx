@@ -1,5 +1,5 @@
 // src/pages/AdminPaneli.jsx
-import React, { useState, useEffect, useRef, useCallback, useContext } from "react"; // useContext eklendi
+import React, { useState, useEffect, useRef, useCallback, useContext } from "react";
 import {
   LineChart,
   Line,
@@ -25,11 +25,17 @@ import {
   RotateCw,
   DollarSign, 
   ListChecks, 
-  CreditCard as CreditCardIcon, // Ödeme Yöntemi için ikon
+  CreditCard as CreditCardIcon,
+  Users, 
+  UserPlus,
+  // Edit3, // Opsiyonel, şimdilik eklenmedi
+  // UserX, // Opsiyonel, şimdilik eklenmedi
 } from "lucide-react";
 import apiClient from '../services/apiClient'; 
 import { AuthContext } from '../AuthContext'; 
 import { useNavigate } from 'react-router-dom'; 
+
+const KULLANICI_ROLLER = ["admin", "kasiyer", "barista", "mutfak_personeli"];
 
 function AdminPaneli() {
   const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext); 
@@ -57,6 +63,17 @@ function AdminPaneli() {
     kategori: "",
   });
   const [silUrunAdi, setSilUrunAdi] = useState("");
+  
+  const [kullanicilar, setKullanicilar] = useState([]);
+  const [yeniKullanici, setYeniKullanici] = useState({
+    kullanici_adi: "",
+    sifre: "",
+    rol: KULLANICI_ROLLER[1], 
+    aktif_mi: true,
+  });
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
   const [error, setError] = useState(null);
   const [loadingData, setLoadingData] = useState(false);
   const wsRef = useRef(null);
@@ -73,6 +90,24 @@ function AdminPaneli() {
   useEffect(() => {
     document.title = "Admin Paneli - Neso";
   }, []);
+
+  const kullanicilariGetir = useCallback(async () => {
+    logInfo("👥 Kullanıcılar getiriliyor...");
+    setLoadingUsers(true);
+    setError(null);
+    try {
+      const response = await apiClient.get("/admin/kullanicilar");
+      setKullanicilar(response.data || []);
+      logInfo(`✅ Kullanıcılar başarıyla getirildi (${response.data?.length || 0} adet).`);
+    } catch (err) {
+      logError("❌ Kullanıcılar alınamadı:", err);
+      const errorDetail = err.response?.data?.detail || err.message || "Kullanıcı listesi alınamadı.";
+      setError(errorDetail);
+      if (err.response?.status === 401 || err.response?.status === 403) logout();
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [logInfo, logError, logout]);
 
   const verileriGetir = useCallback(async () => {
     logInfo(`🔄 Veriler getiriliyor (Admin)...`);
@@ -119,9 +154,9 @@ function AdminPaneli() {
       setYillikChartData(formatlanmisYillikVeri);
 
       setMenu(menuRes?.data?.menu || []);
-      logInfo("✅ Admin verileri başarıyla getirildi.");
+      logInfo("✅ Temel admin verileri başarıyla getirildi.");
     } catch (err) {
-      logError("❌ Admin verileri alınamadı:", err);
+      logError("❌ Temel admin verileri alınamadı:", err);
       const errorDetail =
         err.response?.data?.detail || err.message || "Bilinmeyen bir hata oluştu.";
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -129,7 +164,7 @@ function AdminPaneli() {
         logout(); 
       } else {
         setError(
-          `Veriler alınamadı: ${errorDetail} (URL: ${err.config?.url || "Bilinmiyor"})`
+          `Veriler alınamadı: ${errorDetail}`
         );
       }
     } finally {
@@ -142,6 +177,7 @@ function AdminPaneli() {
       if (isAuthenticated && userRole === 'admin') {
         logInfo("Admin giriş yapmış ve yetkili, veriler çekiliyor...");
         verileriGetir();
+        kullanicilariGetir();
       } else if (isAuthenticated && userRole !== 'admin') {
         logWarn("Admin olmayan kullanıcı admin paneline erişmeye çalıştı. Yetkisiz sayfasına yönlendiriliyor...");
         navigate('/unauthorized');
@@ -150,7 +186,7 @@ function AdminPaneli() {
         navigate('/login', { state: { from: { pathname: '/admin' } } });
       }
     }
-  }, [isAuthenticated, userRole, loadingAuth, navigate, verileriGetir, logInfo, logWarn]);
+  }, [isAuthenticated, userRole, loadingAuth, navigate, verileriGetir, kullanicilariGetir, logInfo, logWarn]);
 
   useEffect(() => {
     if (!isAuthenticated || userRole !== 'admin' || loadingAuth) {
@@ -194,12 +230,12 @@ function AdminPaneli() {
           try {
             const message = JSON.parse(event.data);
             logInfo(`📥 Admin WS mesajı alındı: Tip: ${message.type}`);
-            // Ödeme yöntemi bilgisi 'durum' mesajı içinde gelebilir.
-            // 'verileriGetir' zaten en güncel listeyi çekeceği için
-            // burada ödeme yöntemini ayrıca işlemeye gerek yok, listeye yansıyacaktır.
             if (["siparis", "durum", "masa_durum", "menu_guncellendi"].includes(message.type)) {
               logInfo(`⚡ Admin WS: ${message.type} alındı, veriler yenileniyor...`);
-              verileriGetir(); 
+              verileriGetir();
+              // Kullanıcı listesi için de bir güncelleme tetiklenebilir, eğer kullanıcı ekleme/silme de WS ile bildiriliyorsa
+              // Veya sadece ilgili endpoint'ler çağrıldığında (yeniKullaniciEkle sonrası gibi) yenilenir.
+              // Şimdilik sadece genel verileriGetir'i çağırıyoruz.
             } else if (message.type === "pong") {
                 logDebug("Admin WS: Pong alındı.");
             }
@@ -264,7 +300,7 @@ function AdminPaneli() {
       await apiClient.post(`/menu/ekle`, { ...yeniUrun, fiyat: fiyatNum });
       logInfo("✅ Ürün başarıyla eklendi.");
       setYeniUrun({ ad: "", fiyat: "", kategori: "" });
-      await verileriGetir();
+      await verileriGetir(); // Menü listesini de günceller
       alert("Ürün başarıyla eklendi.");
     } catch (err) {
       logError("❌ Ürün eklenemedi:", err);
@@ -303,7 +339,7 @@ function AdminPaneli() {
       await apiClient.delete(`/menu/sil`, { params: { urun_adi: urunAdiTrimmed } });
       logInfo("🗑️ Ürün başarıyla silindi.");
       setSilUrunAdi("");
-      await verileriGetir();
+      await verileriGetir(); // Menü listesini de günceller
       alert("Ürün başarıyla silindi.");
     } catch (err) {
       logError("❌ Ürün silinemedi:", err);
@@ -315,6 +351,47 @@ function AdminPaneli() {
       setLoadingData(false);
     }
   }, [silUrunAdi, menu, verileriGetir, logInfo, logError, logout]); 
+
+  const handleYeniKullaniciChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setYeniKullanici(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const yeniKullaniciEkle = async (e) => {
+    e.preventDefault();
+    if (!yeniKullanici.kullanici_adi || !yeniKullanici.sifre || !yeniKullanici.rol) {
+      alert("Lütfen kullanıcı adı, şifre ve rol bilgilerini eksiksiz girin.");
+      return;
+    }
+    logInfo(`➕ Yeni kullanıcı ekleniyor: ${yeniKullanici.kullanici_adi}`);
+    setLoadingUsers(true);
+    setError(null);
+    try {
+      await apiClient.post("/admin/kullanicilar", yeniKullanici);
+      logInfo(`✅ Kullanıcı '${yeniKullanici.kullanici_adi}' başarıyla eklendi.`);
+      setYeniKullanici({ kullanici_adi: "", sifre: "", rol: KULLANICI_ROLLER[1], aktif_mi: true });
+      setShowAddUserForm(false); 
+      await kullanicilariGetir(); 
+      alert("Yeni kullanıcı başarıyla eklendi.");
+    } catch (err) {
+      logError("❌ Yeni kullanıcı eklenemedi:", err);
+      const errorDetail = err.response?.data?.detail || err.message || "Bilinmeyen bir hata.";
+      setError(`Yeni kullanıcı eklenirken hata: ${errorDetail}`);
+      alert(`Yeni kullanıcı eklenemedi: ${errorDetail}`);
+      if (err.response?.status === 401 || err.response?.status === 403) logout();
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+  
+  // TODO: Opsiyonel: Kullanıcı Düzenleme ve Silme fonksiyonları
+  // const handleEditUser = (user) => { setEditingUser(user); /* Modal aç veya formu doldur */ };
+  // const handleUpdateUser = async () => { /* API isteği ve liste güncelleme */ };
+  // const handleDeleteUser = async (userId) => { /* API isteği ve liste güncelleme */ };
+
 
   const filtrelenmisSiparisler = orders.filter((o) => {
     if (!o || typeof o !== "object") return false;
@@ -364,7 +441,7 @@ function AdminPaneli() {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
           })
         : "",
-      o.odeme_yontemi || "" // Ödeme yöntemi aramaya eklendi
+      o.odeme_yontemi || "" 
     ]
       .join(" ")
       .toLowerCase();
@@ -393,16 +470,16 @@ function AdminPaneli() {
           <strong className="font-bold">Hata: </strong>
           <span className="block sm:inline mr-2">{error}</span>
           <button
-            onClick={() => { setError(null); verileriGetir(); }}
+            onClick={() => { setError(null); verileriGetir(); kullanicilariGetir(); }}
             className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition duration-200 ease-in-out ml-4"
-            disabled={loadingData}
+            disabled={loadingData || loadingUsers}
           >
-            {loadingData ? "Yükleniyor..." : "Tekrar Dene"}
+            {loadingData || loadingUsers ? "Yükleniyor..." : "Tekrar Dene"}
           </button>
         </div>
       )}
 
-      {loadingData && (
+      {(loadingData || loadingUsers) && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
           <p className="text-white text-lg ml-4">Veriler Yükleniyor...</p>
@@ -422,6 +499,7 @@ function AdminPaneli() {
         </button>
       </div>
 
+      {/* İstatistik Kartları */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-5 rounded-lg shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
           <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-600">
@@ -476,6 +554,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Aktif Masalar ve Ödenmemiş Tutarları Tablosu */}
       <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
         <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center gap-2">
             <ListChecks className="w-6 h-6 text-purple-600" /> Aktif Masalar
@@ -510,6 +589,7 @@ function AdminPaneli() {
         )}
       </div>
 
+      {/* Grafikler */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-700">
@@ -605,6 +685,7 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* Menü Yönetimi */}
       <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
         <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
           <MenuSquare className="w-5 h-5 text-teal-600" /> Menü Yönetimi
@@ -751,6 +832,137 @@ function AdminPaneli() {
         </div>
       </div>
 
+      {/* --- YENİ BÖLÜM: KULLANICI YÖNETİMİ --- */}
+      <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-600" /> Kullanıcı Yönetimi
+            </h3>
+            <button
+                onClick={() => setShowAddUserForm(prev => !prev)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow active:scale-95 flex items-center gap-2 ${
+                    showAddUserForm ? "bg-red-500 hover:bg-red-600 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                }`}
+            >
+                {showAddUserForm ? "Formu Kapat" : <><UserPlus className="w-4 h-4" /> Yeni Kullanıcı Ekle</>}
+            </button>
+        </div>
+
+        {showAddUserForm && (
+            <form onSubmit={yeniKullaniciEkle} className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50 space-y-4">
+                 <h4 className="text-md font-medium text-gray-600 mb-2">Yeni Personel Kaydı</h4>
+                <div>
+                    <label htmlFor="kullanici_adi_form" className="block text-sm font-medium text-gray-700">Kullanıcı Adı</label> {/* ID değiştirildi */}
+                    <input
+                        type="text"
+                        name="kullanici_adi"
+                        id="kullanici_adi_form" // ID değiştirildi
+                        value={yeniKullanici.kullanici_adi}
+                        onChange={handleYeniKullaniciChange}
+                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                        minLength="3"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="sifre_form" className="block text-sm font-medium text-gray-700">Şifre</label> {/* ID değiştirildi */}
+                    <input
+                        type="password"
+                        name="sifre"
+                        id="sifre_form" // ID değiştirildi
+                        value={yeniKullanici.sifre}
+                        onChange={handleYeniKullaniciChange}
+                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                        minLength="6"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="rol_form" className="block text-sm font-medium text-gray-700">Rol</label> {/* ID değiştirildi */}
+                    <select
+                        name="rol"
+                        id="rol_form" // ID değiştirildi
+                        value={yeniKullanici.rol}
+                        onChange={handleYeniKullaniciChange}
+                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                        {KULLANICI_ROLLER.map(rol => (
+                            <option key={rol} value={rol}>
+                                {rol.charAt(0).toUpperCase() + rol.slice(1).replace("_personeli", " Personeli")}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex items-center">
+                    <input
+                        id="aktif_mi_form" // ID değiştirildi
+                        name="aktif_mi"
+                        type="checkbox"
+                        checked={yeniKullanici.aktif_mi}
+                        onChange={handleYeniKullaniciChange}
+                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    />
+                    <label htmlFor="aktif_mi_form" className="ml-2 block text-sm text-gray-900"> {/* ID değiştirildi */}
+                        Aktif Kullanıcı
+                    </label>
+                </div>
+                <button
+                    type="submit"
+                    disabled={loadingUsers}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md shadow-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    {loadingUsers ? <RotateCw className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" /> }
+                    Kullanıcıyı Ekle
+                </button>
+            </form>
+        )}
+
+        <h4 className="text-md font-medium text-gray-600 mb-3 mt-4">Mevcut Kullanıcılar</h4>
+        {loadingUsers && <div className="text-center py-4">Kullanıcılar yükleniyor...</div>}
+        {!loadingUsers && kullanicilar.length === 0 && <div className="text-center py-4 text-gray-500">Kayıtlı kullanıcı bulunmamaktadır.</div>}
+        {!loadingUsers && kullanicilar.length > 0 && (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-md">
+                    <thead className="bg-indigo-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">ID</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Kullanıcı Adı</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Rol</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Durum</th>
+                            {/* <th className="px-4 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">İşlemler</th> */}
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {kullanicilar.map(k => (
+                            <tr key={k.id} className="hover:bg-indigo-50/50 text-sm">
+                                <td className="px-4 py-3 whitespace-nowrap text-gray-700">{k.id}</td>
+                                <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">{k.kullanici_adi}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                                    {k.rol.charAt(0).toUpperCase() + k.rol.slice(1).replace("_personeli", " Personeli")}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                        k.aktif_mi ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                        {k.aktif_mi ? 'Aktif' : 'Pasif'}
+                                    </span>
+                                </td>
+                                {/*
+                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                                    <button onClick={() => console.log("Düzenle:", k.id)} className="text-indigo-600 hover:text-indigo-900 mr-3"><Edit3 size={16}/></button>
+                                    <button onClick={() => console.log("Sil:", k.id)} className="text-red-600 hover:text-red-900"><UserX size={16}/></button>
+                                </td>
+                                */}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )}
+      </div>
+      {/* --- BİTİŞ: KULLANICI YÖNETİMİ --- */}
+
+      {/* Sipariş Geçmişi */}
       <div className="bg-white p-6 rounded-lg shadow-lg">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">📋 Sipariş Geçmişi</h3>
         <input
@@ -768,19 +980,19 @@ function AdminPaneli() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Masa</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider min-w-[200px]">Sipariş İçeriği & Not</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Durum</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Ödeme Yöntemi</th> {/* YENİ SÜTUN BAŞLIĞI */}
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Ödeme Yöntemi</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Tarih</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loadingData && (!filtrelenmisSiparisler || filtrelenmisSiparisler.length === 0) && (!arama && orders.length === 0) && ( 
                 <tr>
-                  <td colSpan="6" className="text-center py-10 text-gray-400 italic">Siparişler yükleniyor...</td> {/* Colspan 6 oldu */}
+                  <td colSpan="6" className="text-center py-10 text-gray-400 italic">Siparişler yükleniyor...</td>
                 </tr>
               )}
               {!loadingData && filtrelenmisSiparisler.length === 0 && ( 
                 <tr>
-                  <td colSpan="6" className="text-center py-10 text-gray-500"> {/* Colspan 6 oldu */}
+                  <td colSpan="6" className="text-center py-10 text-gray-500">
                     {arama
                       ? "Aramanızla eşleşen sipariş bulunamadı."
                       : orders.length === 0
@@ -829,7 +1041,7 @@ function AdminPaneli() {
                 else if (siparis.durum === "iptal") durumClass = "bg-red-100 text-red-800 line-through opacity-70";
                 else if (siparis.durum === "odendi") durumClass = "bg-purple-100 text-purple-800";
 
-                const odemeYontemiText = siparis.odeme_yontemi || "-"; // Ödeme yöntemi
+                const odemeYontemiText = siparis.odeme_yontemi || "-"; 
                 let odemeYontemiClass = "text-gray-500";
                 if (siparis.odeme_yontemi === "Nakit") odemeYontemiClass = "text-green-700";
                 else if (siparis.odeme_yontemi === "Kredi Kartı") odemeYontemiClass = "text-blue-700";
@@ -854,7 +1066,6 @@ function AdminPaneli() {
                         {durumText}
                       </span>
                     </td>
-                    {/* YENİ SÜTUN VERİSİ */}
                     <td className={`px-4 py-3 whitespace-nowrap font-medium ${odemeYontemiClass}`}>
                         {siparis.durum === "odendi" && siparis.odeme_yontemi === "Kredi Kartı" && <CreditCardIcon className="w-4 h-4 inline-block mr-1" />}
                         {siparis.durum === "odendi" && siparis.odeme_yontemi === "Nakit" && <DollarSign className="w-4 h-4 inline-block mr-1" />}
@@ -880,10 +1091,9 @@ function AdminPaneli() {
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-lg mt-8">
-        <h3 className="text-lg font-semibold mb-4 text-gray-700">⚙️ Ayarlar</h3>
+        <h3 className="text-lg font-semibold mb-4 text-gray-700">⚙️ Sistem Bilgisi</h3>
         <div className="text-sm text-gray-600 space-y-2">
-          <p>Kullanıcı ve rol yönetimi artık sunucu tarafında veritabanı üzerinden yapılmaktadır.</p>
-          <p>Frontend tarafında kimlik doğrulama AuthContext ile yönetilmektedir.</p>
+          <p>Neso Sipariş Asistanı Admin Paneli.</p>
           {currentUser && (
             <p className="mt-3 text-xs text-gray-500">
               Mevcut Giriş Yapan Kullanıcı: <strong>{currentUser.kullanici_adi}</strong> (Rol: {currentUser.rol})
