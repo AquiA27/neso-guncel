@@ -1,39 +1,37 @@
 // src/pages/MutfakEkrani.jsx
 import React, { useState, useEffect, useRef, useCallback, useContext } from "react";
-import apiClient from '../services/apiClient'; // Güncellendi
-import { AuthContext } from '../AuthContext'; // Güncellendi
-import { useNavigate } from 'react-router-dom'; // Güncellendi
-
-// const API_BASE = process.env.REACT_APP_API_BASE; // KALDIRILDI
-// const ADMIN_USERNAME = process.env.REACT_APP_ADMIN_USERNAME || "admin"; // KALDIRILDI
-// const ADMIN_PASSWORD = process.env.REACT_APP_ADMIN_PASSWORD || "admin123"; // KALDIRILDI
-// const AUTH_HEADER = "Basic " + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`); // KALDIRILDI
+import apiClient from '../services/apiClient';
+import { AuthContext } from '../AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 function MutfakEkrani() {
-  const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext); // Güncellendi
-  const navigate = useNavigate(); // Güncellendi
+  const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState(null);
-  const [loadingData, setLoadingData] = useState(true); // Güncellendi: loading -> loadingData
+  const [loadingData, setLoadingData] = useState(true);
   const wsRef = useRef(null);
   const audioRef = useRef(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const logInfo = useCallback((message) => console.log(`[Mutfak Ekranı] INFO: ${message}`), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const logError = useCallback((message, errorObj) => console.error(`[Mutfak Ekranı] ERROR: ${message}`, errorObj || ""), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const logWarn = useCallback((message) => console.warn(`[Mutfak Ekranı] WARN: ${message}`), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const logDebug = useCallback((message) => console.log(`[Mutfak Ekranı] DEBUG: ${message}`), []);
 
   useEffect(() => {
     document.title = "Mutfak Paneli - Neso";
     if (typeof window !== "undefined") {
       try {
-        audioRef.current = new Audio("/notification.mp3"); // Public klasöründeki ses dosyası
+        audioRef.current = new Audio("/notification.mp3");
         audioRef.current.preload = "auto";
         logInfo("🔔 Sesli bildirim nesnesi oluşturuldu.");
       } catch (err) {
         logError("Sesli bildirim nesnesi oluşturulamadı:", err);
-        // setError("Sesli bildirim başlatılamadı."); // Kullanıcıyı çok fazla hatayla boğmamak için kaldırılabilir
       }
     }
   }, [logInfo, logError]);
@@ -43,7 +41,6 @@ function MutfakEkrani() {
     setLoadingData(true);
     setError(null);
     try {
-      // Güncellendi: Basic Auth header'ları kaldırıldı, apiClient token'ı otomatik ekleyecek.
       const response = await apiClient.get(`/siparisler`);
       const parsedOrders = (response.data.orders || []).map((order) => {
         if (typeof order.sepet === "string") {
@@ -59,22 +56,21 @@ function MutfakEkrani() {
       const errorDetail = err.response?.data?.detail || err.message || "Bilinmeyen hata.";
       if (err.response?.status === 401 || err.response?.status === 403) {
         setError("Bu verilere erişim yetkiniz yok veya oturumunuz sonlanmış.");
-        logout(); // Güncellendi: Yetkisiz ise çıkış yaptır
+        logout();
       } else {
         setError(`Siparişler alınamadı: ${errorDetail}`);
       }
     } finally {
       setLoadingData(false);
     }
-  }, [logInfo, logError, logWarn, logout]); // logout eklendi
+  }, [logInfo, logError, logWarn, logout]);
 
-  // Güncellendi: Auth durumu kontrolü ve ilk veri çekme
   useEffect(() => {
-    if (!loadingAuth) { // Auth durumu netleştikten sonra
+    if (!loadingAuth) {
       const allowedRoles = ['admin', 'mutfak_personeli', 'barista'];
       if (isAuthenticated && allowedRoles.includes(userRole)) {
         logInfo("Mutfak ekranı için yetkili kullanıcı, veriler çekiliyor ve WS bağlanıyor...");
-        fetchOrders(); // İlk veri çekme
+        fetchOrders();
       } else if (isAuthenticated && !allowedRoles.includes(userRole)) {
         logWarn("Mutfak ekranı için yetkisiz kullanıcı. Yönlendiriliyor...");
         navigate('/unauthorized');
@@ -85,8 +81,6 @@ function MutfakEkrani() {
     }
   }, [isAuthenticated, userRole, loadingAuth, navigate, fetchOrders, logInfo, logWarn]);
 
-
-  // Güncellendi: WebSocket Bağlantısı (Sadece yetkili kullanıcılar için)
   useEffect(() => {
     const allowedRolesForWS = ['admin', 'mutfak_personeli', 'barista'];
     if (!isAuthenticated || !allowedRolesForWS.includes(userRole) || loadingAuth) {
@@ -101,6 +95,7 @@ function MutfakEkrani() {
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
     const baseReconnectDelay = 5000;
+    let reconnectTimeoutId = null;
 
     const connectWebSocket = () => {
       if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
@@ -110,14 +105,14 @@ function MutfakEkrani() {
       const apiBaseForWs = process.env.REACT_APP_API_BASE;
       if (!apiBaseForWs) {
         logError("REACT_APP_API_BASE tanımlı değil, Mutfak WS kurulamıyor.");
-        setError("API adresi yapılandırılmamış."); // Kullanıcıya bilgi ver
+        setError("API adresi yapılandırılmamış.");
         return;
       }
 
       try {
-        const wsProtocol = apiBaseForWs.startsWith("https") ? "wss:" : "ws:";
+        const wsProtocol = apiBaseForWs.startsWith("https") ? "wss:" : (window.location.protocol === "https:" ? "wss:" : "ws:");
         const wsHost = apiBaseForWs.replace(/^https?:\/\//, "");
-        const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak`; // Mutfak için doğru WebSocket endpoint'i
+        const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak`;
         logInfo(`📡 Mutfak WebSocket bağlantısı deneniyor: ${wsUrl}`);
         wsRef.current = new WebSocket(wsUrl);
 
@@ -125,6 +120,7 @@ function MutfakEkrani() {
           logInfo("✅ Mutfak WebSocket bağlantısı başarılı.");
           setError(null);
           reconnectAttempts = 0;
+          if (reconnectTimeoutId) { clearTimeout(reconnectTimeoutId); reconnectTimeoutId = null;}
         };
 
         wsRef.current.onmessage = (event) => {
@@ -134,12 +130,11 @@ function MutfakEkrani() {
             logInfo(`📥 Mutfak WebSocket mesajı alındı: Tip: ${message.type}`);
             if (message.type === "siparis") {
               logInfo("📦 Yeni sipariş geldi (Mutfak WS), liste güncelleniyor ve bildirim çalınıyor...");
-              if (audioRef.current && audioRef.current.readyState >= 2) { // readyState kontrolü eklendi
-                audioRef.current.pause(); // Önceki sesi durdur
-                audioRef.current.currentTime = 0; // Başa sar
+              if (audioRef.current && audioRef.current.readyState >= 2) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
                 audioRef.current.play().catch(err => {
                     logError("Sesli bildirim çalınamadı (play error):", err);
-                    // setError("Yeni sipariş bildirimi sesi oynatılamadı."); // Sürekli hata göstermemek için
                 });
               } else if (audioRef.current) {
                 logWarn("Audio nesnesi henüz çalmaya hazır değil veya yüklenemedi.");
@@ -168,8 +163,8 @@ function MutfakEkrani() {
           wsRef.current = null;
           if (isAuthenticated && allowedRolesForWS.includes(userRole) && event.code !== 1000 && event.code !== 1001 && !event.wasClean && reconnectAttempts < maxReconnectAttempts) {
             const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts) + Math.random() * 1000;
-            logInfo(`Mutfak WS beklenmedik şekilde kapandı, ${delay}ms sonra tekrar denenecek... (Deneme: ${reconnectAttempts + 1})`);
-            setTimeout(connectWebSocket, delay);
+            logInfo(`Mutfak WS beklenmedik şekilde kapandı, ${Math.round(delay/1000)}sn sonra tekrar denenecek... (Deneme: ${reconnectAttempts + 1})`);
+            reconnectTimeoutId = setTimeout(connectWebSocket, delay);
             reconnectAttempts++;
           } else if (reconnectAttempts >= maxReconnectAttempts) {
             setError("Mutfak sunucu bağlantısı tekrar sağlanamadı. Lütfen sayfayı yenileyin.");
@@ -192,20 +187,21 @@ function MutfakEkrani() {
           logError("Mutfak Ping gönderilemedi:", err);
         }
       } else if (isAuthenticated && allowedRolesForWS.includes(userRole) && !wsRef.current && reconnectAttempts < maxReconnectAttempts) {
-        // Eğer WS kapalıysa ve hala giriş yapılmışsa, yeniden bağlanmayı tetikle
         logWarn("Mutfak Ping: WebSocket bağlantısı aktif değil, yeniden bağlantı deneniyor.");
         connectWebSocket();
       }
-    }, 15000); // 15 saniyede bir ping
+    }, 15000);
 
     return () => {
       clearInterval(pingInterval);
+      if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
       if (wsRef.current) {
         logInfo("MutfakEkrani: Component kaldırılıyor, WebSocket kapatılıyor.");
         wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, userRole, loadingAuth, fetchOrders, logInfo, logError, logWarn, logDebug]);
 
 
@@ -213,25 +209,23 @@ function MutfakEkrani() {
     logInfo(`🔄 Mutfak: Sipariş durumu güncelleniyor: ID: ${siparisId}, Masa: ${masa}, Yeni Durum: ${durum}`);
     setError(null);
     try {
-      // Güncellendi: apiClient kullanıldı, Basic Auth header'ları kaldırıldı
-      // Backend endpoint'i "/siparis-guncelle" veya "/siparis/{id}" (PATCH) olabilir.
-      // main.py'de "/siparis-guncelle" (POST) ve "/siparis/{id}" (PATCH) her ikisi de var.
-      // "/siparis-guncelle" hem ID hem de masa alıyor, "/siparis/{id}" sadece ID alıyor.
-      // Mutfak ekranı için ID'li olan daha uygun olabilir.
-      // Şimdilik "/siparis-guncelle" kullanalım, backend'deki yetkilendirme buna göre ayarlandı.
-      const response = await apiClient.post(
-        `/siparis-guncelle`,
-        { id: siparisId, masa, durum } // Backend bu payload'u bekliyor
+      // === DÜZELTME YAPILAN KISIM ===
+      const response = await apiClient.patch( // apiClient.post yerine apiClient.patch
+        `/siparis/${siparisId}`,              // Doğru endpoint yolu: /siparis/{siparis_id}
+        { durum: durum }                     // Body'de sadece "durum" gönderilecek
       );
+      // === DÜZELTME SONU ===
       logInfo(`✅ Mutfak: Sipariş durumu başarıyla güncellendi (ID: ${siparisId}). Yanıt: ${response.data.message}`);
-      // fetchOrders(); // WebSocket ile güncellenmesi beklenir.
+      // fetchOrders(); // WebSocket zaten güncelleyeceği için bu genellikle gereksizdir.
     } catch (error) {
-      logError(`❌ Mutfak: Sipariş durumu güncellenemedi (ID: ${siparisId}):`, error);
+      logError(`❌ Mutfak: Sipariş durumu güncellenemedi (ID: ${siparisId}):`, error.response || error);
       const errorDetail = error.response?.data?.detail || error.message || "Bilinmeyen hata.";
       setError(`Sipariş durumu güncellenirken bir hata oluştu: ${errorDetail}`);
-      if (error.response?.status === 401 || error.response?.status === 403) logout(); // Güncellendi
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        logout();
+      }
     }
-  }, [logInfo, logError, logout]); // logout eklendi
+  }, [logInfo, logError, logout, setError, apiClient]); // apiClient bağımlılıklara eklendi (önemli değilse de iyi pratik)
 
   const handleHazirlaniyor = useCallback((siparisId, masa) => {
     updateOrderStatus(siparisId, masa, "hazirlaniyor");
@@ -242,8 +236,6 @@ function MutfakEkrani() {
   }, [updateOrderStatus]);
 
   const handleIptal = useCallback((siparisId, masa) => {
-    // Admin rolündeki kullanıcılar da buradan iptal edebilir, bu nedenle iptal süresi kontrolü yok.
-    // Müşteri iptalinde 2dk sınırı vardı.
     if (window.confirm(`Masa ${masa}, Sipariş #${siparisId} iptal edilecek. Emin misiniz?`)) {
       updateOrderStatus(siparisId, masa, "iptal");
     }
@@ -252,8 +244,6 @@ function MutfakEkrani() {
   const formatTime = useCallback((timeStr) => {
     if (!timeStr) return "-";
     try {
-      // API'den gelen zaman string'i "YYYY-MM-DD HH:MM:SS" formatında olabilir.
-      // Veya ISO formatında. new Date() her ikisini de genellikle anlar.
       const date = new Date(timeStr);
       return new Intl.DateTimeFormat("tr-TR", {
         hour: "2-digit",
@@ -262,31 +252,28 @@ function MutfakEkrani() {
         hour12: false,
       }).format(date);
     } catch (e) {
-      // Eğer parse edilemezse, ham string'i döndür
       return timeStr;
     }
   }, []);
 
   const getStatusColors = useCallback((status) => {
-    switch (status?.toLowerCase()) { // toLowerCase eklendi
+    switch (status?.toLowerCase()) {
       case "bekliyor":
-        return "bg-yellow-100 border-yellow-400"; // Renkler biraz daha belirgin yapıldı
+        return "bg-yellow-100 border-yellow-400";
       case "hazirlaniyor":
         return "bg-blue-100 border-blue-400";
       case "hazir":
         return "bg-green-100 border-green-400";
       case "iptal":
-        return "bg-red-200 border-red-400 text-gray-600 line-through"; // Renkler biraz daha belirgin
+        return "bg-red-200 border-red-400 text-gray-600 line-through";
       default:
         return "bg-gray-100 border-gray-300";
     }
   }, []);
 
-  // Güncellendi: Yükleme ve Yetki Kontrolü
   if (loadingAuth) {
     return <div className="min-h-screen flex items-center justify-center p-4 text-slate-600">Mutfak ekranı yetkileri kontrol ediliyor...</div>;
   }
-  // ProtectedRoute bu sayfaya sadece yetkili kullanıcıların gelmesini sağlamalı.
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-yellow-100 via-orange-100 to-orange-200 p-6 text-gray-800 font-sans">
@@ -304,7 +291,6 @@ function MutfakEkrani() {
             </div>
         )}
       </div>
-
 
       {error && (
         <div
@@ -328,8 +314,8 @@ function MutfakEkrani() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {orders
-            .filter((order) => order.durum === "bekliyor" || order.durum === "hazirlaniyor") // Sadece aktif siparişleri göster
-            .sort((a, b) => new Date(a.zaman) - new Date(b.zaman)) // Eskiden yeniye sırala
+            .filter((order) => order.durum === "bekliyor" || order.durum === "hazirlaniyor")
+            .sort((a, b) => new Date(a.zaman) - new Date(b.zaman))
             .map((order) => {
               if (!Array.isArray(order.sepet) || order.sepet.length === 0) {
                 logWarn(`Boş veya geçersiz sepetli sipariş atlandı (ID: ${order.id})`);
@@ -349,7 +335,7 @@ function MutfakEkrani() {
                       className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                         order.durum === "hazirlaniyor" ? "bg-blue-500 text-white" :
                         order.durum === "bekliyor" ? "bg-yellow-500 text-white" :
-                        "bg-gray-500 text-white" // Diğer durumlar için (normalde burada görünmez)
+                        "bg-gray-500 text-white"
                       }`}
                     >
                       {order.durum || "Bilinmiyor"}
