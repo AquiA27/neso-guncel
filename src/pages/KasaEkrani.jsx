@@ -1,7 +1,4 @@
-// src/pages/KasaEkrani.jsx
-
-// ... (diğer importlar)
-import { DollarSign, CreditCard, CheckCircle, AlertCircle, RotateCw } from 'lucide-react'; // İkonlar eklendi/güncellendi
+import React, { useState, useEffect, useRef, useCallback, useContext } from "react";
 
 function KasaEkrani() {
   // ... (mevcut state'ler ve fonksiyonlar)
