@@ -52,53 +52,35 @@ function MasaAsistani() {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(`karsilama_yapildi_${masaId}`) === 'true';
   });
-  const [siparisDurumu, setSiparisDurumu] = useState(null);
+  const [siparisDurumu, setSiparisDurumu] = useState(null); // 'bekliyor', 'hazirlaniyor', 'hazir', 'iptal', 'odendi'
   const [hataMesaji, setHataMesaji] = useState(null);
 
-  const [aktifSiparis, setAktifSiparis] = useState(null);
-  const [iptalKalanSure, setIptalKalanSure] = useState(0);
+  const [aktifSiparis, setAktifSiparis] = useState(null); // { id: siparisId, zaman: isoString, iptalEdilemez: bool }
+  const [iptalKalanSure, setIptalKalanSure] = useState(0); // Saniye cinsinden
   const [iptalLoading, setIptalLoading] = useState(false);
+
+  // YENİ: AI'dan gelen son parse edilmiş JSON yanıtını saklamak için
+  const [lastAiResponseData, setLastAiResponseData] = useState(null);
 
   const audioRef = useRef(null);
   const mesajKutusuRef = useRef(null);
   const wsRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  // --- Yardımcı Fonksiyonlar (levenshteinDistance, calculateSimilarity, getDurumText) ---
-  const levenshteinDistance = (a = '', b = '') => {
-    if (a.length === 0) return b.length;
-    if (b.length === 0) return a.length;
-    const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
-    for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
-    for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
-      }
-    }
-    return matrix[a.length][b.length];
-  };
 
-  const calculateSimilarity = (str1 = '', str2 = '') => {
-    const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
-    const maxLength = Math.max(str1.length, str2.length);
-    if (maxLength === 0) return 1;
-    return 1 - distance / maxLength;
-  };
-
+  // --- Yardımcı Fonksiyonlar ---
   const getDurumTextAndStyle = (durum) => {
-    // Sipariş durumu için metin ve stil döndürür
     switch (durum) {
       case 'bekliyor': return { text: 'Siparişiniz Alındı, Bekliyor...', style: 'bg-amber-500/90 text-white', icon: '⏳' };
       case 'hazirlaniyor': return { text: 'Siparişiniz Hazırlanıyor...', style: 'bg-sky-500/90 text-white animate-pulse', icon: '👨‍🍳' };
       case 'hazir': return { text: 'Siparişiniz Hazır! Afiyet olsun.', style: 'bg-green-500/90 text-white', icon: '✅' };
       case 'iptal': return { text: 'Siparişiniz İptal Edildi.', style: 'bg-red-600/90 text-white', icon: '❌' };
+      case 'odendi': return { text: 'Siparişiniz Ödendi. Teşekkürler!', style: 'bg-purple-500/90 text-white', icon: '🛍️' };
       default: return { text: null, style: '', icon: '' };
     }
   };
 
-  // --- Loglama Fonksiyonları ---
+  // --- Loglama Fonksiyonları (masaId'yi otomatik ekler) ---
   const logInfo = useCallback((message, ...optionalParams) => console.info(`[Masa ${masaId}] INFO: ${message}`, ...optionalParams), [masaId]);
   const logError = useCallback((message, error, ...optionalParams) => console.error(`[Masa ${masaId}] ERROR: ${message}`, error || '', ...optionalParams), [masaId]);
   const logWarn = useCallback((message, ...optionalParams) => console.warn(`[Masa ${masaId}] WARN: ${message}`, ...optionalParams), [masaId]);
@@ -125,45 +107,51 @@ function MasaAsistani() {
         const wsUrl = `${wsProtocol}//${wsHost}/ws/mutfak?masa_id=${masaId}`;
         logInfo(`📡 WebSocket bağlantısı deneniyor: ${wsUrl}`);
         wsRef.current = new WebSocket(wsUrl);
+
         wsRef.current.onopen = () => { logInfo("✅ WebSocket bağlantısı başarılı."); setHataMesaji(null); };
+
         wsRef.current.onmessage = (event) => {
-          logDebug("WebSocket Mesajı Geldi:", event.data);
+          logDebug("WebSocket Mesajı Geldi (Ham):", event.data);
           try {
             const message = JSON.parse(event.data);
-            logInfo(`📥 WebSocket mesajı alındı: Tip: ${message.type}`);
+            logInfo(`📥 WebSocket mesajı alındı (Parse Edilmiş): Tip: ${message.type}`);
             if (message.type === 'pong') {
-              // Isteyerek bir şey yapmıyoruz
+              // Ping'e yanıt, özel bir işlem yapmaya gerek yok
             } else if (message.type === 'durum' && message.data) {
               const { masa, durum: newDurum, id: siparisIdWS } = message.data;
               if (String(masa) === String(masaId)) { 
-                logInfo(`📊 Durum güncellemesi: Masa ${masaId}, Sipariş ID (WS): ${siparisIdWS}, Yeni Durum: ${newDurum}`);
+                logInfo(`📊 Durum güncellemesi alındı: Masa ${masaId}, Sipariş ID (WS): ${siparisIdWS}, Yeni Durum: ${newDurum}`);
                 setSiparisDurumu(newDurum); 
-                if (aktifSiparis && aktifSiparis.id === siparisIdWS && (newDurum === 'iptal' || newDurum === 'hazir' || newDurum === 'odendi')) {
-                  logInfo(`Aktif sipariş (ID: ${aktifSiparis.id}) durumu '${newDurum}' olarak güncellendi, iptal bilgileri temizleniyor.`);
+                if (aktifSiparis && String(aktifSiparis.id) === String(siparisIdWS) && (newDurum === 'iptal' || newDurum === 'hazir' || newDurum === 'odendi')) {
+                  logInfo(`Aktif sipariş (ID: ${aktifSiparis.id}) durumu '${newDurum}' olarak güncellendi, iptal bilgileri ve aktif sipariş temizleniyor.`);
                   setAktifSiparis(null); 
                   setIptalKalanSure(0);
                 }
+              } else {
+                logDebug(`WS durum güncellemesi (${newDurum}) farklı bir masa (${masa}) için, mevcut masa (${masaId}) etkilenmedi.`);
               }
             } else if (message.type === 'siparis') {
-              logInfo(`ℹ️ Backend'den genel yeni sipariş yayını alındı (ID: ${message.data?.id}). Masa ${masaId} için özel bir işlem yapılmıyor.`);
+              // Bu genellikle tüm mutfak/adminlere giden genel bir yayındır.
+              // Masa bazlı özel bir işlem yapmaya gerek yok, `durum` mesajı daha spesifik olacaktır.
+              logInfo(`ℹ️ Backend'den genel yeni sipariş yayını alındı (ID: ${message.data?.id}). Bu masa (${masaId}) için özel bir işlem yapılmıyor, 'durum' mesajı bekleniyor.`);
             } else {
               logWarn("⚠️ Bilinmeyen WebSocket mesaj tipi:", message);
             }
           } catch (err) {
-            logError("WebSocket mesajı işlenirken hata:", err);
+            logError("WebSocket mesajı işlenirken hata:", err, "Ham mesaj:", event.data);
           }
         };
         wsRef.current.onerror = (errorEvent) => {
-          const error = errorEvent.message || (errorEvent.target?.url ? `Bağlantı hatası: ${errorEvent.target.url}` : "Bilinmeyen WS hatası");
-          logError("❌ WebSocket hatası:", error);
+          const errorDetail = errorEvent.message || (errorEvent.target?.url ? `Bağlantı hatası: ${errorEvent.target.url}` : "Bilinmeyen WS hatası");
+          logError("❌ WebSocket bağlantı hatası:", errorDetail, errorEvent);
           setHataMesaji("Sunucuyla anlık bağlantı koptu. Sayfayı yenilemeyi deneyebilirsiniz.");
         };
         wsRef.current.onclose = (event) => {
-          logInfo(`🔌 WebSocket bağlantısı kapandı. Kod: ${event.code}, Sebep: ${event.reason || 'Bilinmiyor'}`);
+          logInfo(`🔌 WebSocket bağlantısı kapandı. Kod: ${event.code}, Sebep: ${event.reason || 'Bilinmiyor'}, Temiz mi: ${event.wasClean}`);
           wsRef.current = null;
           if (event.code !== 1000 && event.code !== 1001 && !event.wasClean) { 
-            logInfo("WebSocket beklenmedik şekilde kapandı, 5 saniye sonra tekrar denenecek...");
-            setTimeout(connectWebSocket, 5000 + Math.random() * 1000);
+            logInfo("WebSocket beklenmedik şekilde kapandı, 5 saniye sonra tekrar bağlantı denenecek...");
+            setTimeout(connectWebSocket, 5000 + Math.random() * 1000); // Rastgele bir gecikme ekleyerek sunucuya yığılmayı önle
           }
         };
       } catch (error) {
@@ -171,22 +159,28 @@ function MasaAsistani() {
         setHataMesaji("Sunucu bağlantısı kurulamıyor. Lütfen yetkiliye bildirin.");
       }
     };
+
     if (API_BASE) { 
       connectWebSocket();
     }
+
     const pingInterval = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        try { wsRef.current.send(JSON.stringify({ type: 'ping' })); }
+        try { 
+          wsRef.current.send(JSON.stringify({ type: 'ping' })); 
+          logDebug("Ping gönderildi.");
+        }
         catch (err) { logError("Ping gönderilirken hata:", err); }
-      } else if (API_BASE && !wsRef.current) { 
-        logWarn("Ping: WebSocket bağlantısı aktif değil, yeniden bağlantı deneniyor.");
+      } else if (API_BASE && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) { 
+        logWarn("Ping: WebSocket bağlantısı aktif değil veya kapalı, yeniden bağlantı deneniyor.");
         connectWebSocket();
       }
-    }, 30000); 
+    }, 30000); // 30 saniyede bir ping
+
     return () => {
       clearInterval(pingInterval);
       if (wsRef.current) {
-        logInfo("Component kaldırılıyor, WebSocket kapatılıyor (normal kapanış).");
+        logInfo("Component kaldırılıyor, WebSocket bağlantısı normal şekilde kapatılıyor (1000).");
         wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;
       }
@@ -204,11 +198,11 @@ function MasaAsistani() {
         if (res.data && Array.isArray(res.data.menu)) {
           const menuItems = res.data.menu.flatMap(cat =>
             Array.isArray(cat.urunler) ? cat.urunler.map(u => ({
-              ad: String(u.ad || 'İsimsiz Ürün').toLowerCase().trim(),
-              orjinalAd: String(u.ad || 'İsimsiz Ürün').trim(),
+              ad: String(u.ad || 'İsimsiz Ürün').toLowerCase().trim(), // Küçük harf ve trim'li hali karşılaştırma için
+              orjinalAd: String(u.ad || 'İsimsiz Ürün').trim(),       // Orijinal adı görüntüleme ve backend'e gönderme için
               fiyat: Number(u.fiyat) || 0,
               kategori: String(cat.kategori || 'Bilinmeyen Kategori').trim(),
-              stok_durumu: u.stok_durumu === undefined ? 1 : Number(u.stok_durumu),
+              stok_durumu: u.stok_durumu === undefined ? 1 : Number(u.stok_durumu), // Stokta var/yok (1 veya 0)
             })) : []
           );
           setMenuUrunler(menuItems);
@@ -247,40 +241,46 @@ function MasaAsistani() {
   const sesliYanıtVer = useCallback(async (text) => {
     if (!API_BASE) { logError("API_BASE tanımsız, sesli yanıt verilemiyor."); setHataMesaji("API adresi ayarlanmamış."); return; }
     if (!text || typeof text !== 'string' || !text.trim()) { logWarn("Seslendirilecek geçerli metin boş."); return; }
-    logInfo(`🔊 Sesli yanıt isteği: "${text.substring(0, 50)}..."`);
+    
+    logInfo(`🔊 Sesli yanıt isteği hazırlanıyor: "${text.substring(0, 50)}..."`);
     setAudioPlaying(true); setHataMesaji(null);
+
     try {
-      logDebug(`TTS isteği gönderiliyor: /sesli-yanit, Metin: "${text.substring(0, 50)}..."`);
-      const res = await axios.post(`${API_BASE}/sesli-yanit`, { text }, { responseType: "arraybuffer" });
-      logDebug(`TTS yanıtı alındı. Status: ${res.status}, Data length: ${res.data?.byteLength}`);
-      if (!res.data || res.data.byteLength < 100) { 
-        throw new Error("Sunucudan boş veya geçersiz ses verisi alındı.");
+      logDebug(`TTS isteği gönderiliyor: URL: ${API_BASE}/sesli-yanit, Metin: "${text.substring(0, 50)}..."`);
+      const res = await axios.post(`${API_BASE}/sesli-yanit`, { text: text, language: "tr-TR" }, { responseType: "arraybuffer" });
+      logDebug(`TTS yanıtı alındı. Status: ${res.status}, Data length (bytes): ${res.data?.byteLength}`);
+
+      if (!res.data || res.data.byteLength < 100) { // Çok küçük bir dosya genellikle hatadır
+        throw new Error(`Sunucudan boş veya geçersiz ses verisi alındı (boyut: ${res.data?.byteLength} byte).`);
       }
+
       const blob = new Blob([res.data], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url); 
-      if (audioRef.current && !audioRef.current.paused) { 
-        audioRef.current.pause(); 
-        if (audioRef.current.src.startsWith('blob:')) {
+      
+      // Mevcut sesi durdur ve kaynağı temizle
+      if (audioRef.current) {
+        audioRef.current.pause();
+        if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
             URL.revokeObjectURL(audioRef.current.src); 
         }
         audioRef.current.src = ''; 
+        audioRef.current.load(); // Kaynağı sıfırla
+        audioRef.current = null;
       }
-      audioRef.current = audio; 
-      try {
-        await audio.play();
-        logInfo("✅ Sesli yanıt çalınıyor.");
-      } catch (playError) {
-        logError("Audio.play() hatası (muhtemelen kullanıcı etkileşimi eksik):", playError);
-        setAudioPlaying(false); URL.revokeObjectURL(url); audioRef.current = null; 
-        setHataMesaji("Ses dosyası otomatik oynatılamadı. Lütfen sayfaya tıklayıp tekrar deneyin.");
-        return; 
-      }
-      audio.onended = () => { logInfo("🏁 Sesli yanıt bitti."); setAudioPlaying(false); URL.revokeObjectURL(url); audioRef.current = null; };
-      audio.onerror = (err) => { logError("Ses çalma hatası (onerror):", err); setAudioPlaying(false); URL.revokeObjectURL(url); audioRef.current = null; setHataMesaji("Sesli yanıt oynatılamadı."); };
+      
+      const newAudio = new Audio(url); 
+      audioRef.current = newAudio; 
+
+      await newAudio.play();
+      logInfo("✅ Sesli yanıt çalınıyor.");
+      
+      newAudio.onended = () => { logInfo("🏁 Sesli yanıt bitti."); setAudioPlaying(false); URL.revokeObjectURL(url); audioRef.current = null; };
+      newAudio.onerror = (err) => { logError("Ses çalma hatası (audio.onerror):", err); setAudioPlaying(false); URL.revokeObjectURL(url); audioRef.current = null; setHataMesaji("Sesli yanıt oynatılamadı."); };
+    
     } catch (error) {
-      logError("❌ TTS API isteği veya ses işleme hatası:", error); setAudioPlaying(false);
-      const hataMesajiDetay = error.response?.data?.detail || error.message || "Bilinmeyen TTS hatası.";
+      logError("❌ TTS API isteği veya ses işleme hatası:", error.response || error); 
+      setAudioPlaying(false);
+      const hataMesajiDetay = error.response?.data?.detail || (error.response?.data ? new TextDecoder().decode(error.response.data) : null) || error.message || "Bilinmeyen TTS hatası.";
       setHataMesaji(`Sesli yanıt alınamadı: ${hataMesajiDetay}`);
     }
   }, [API_BASE, logInfo, logError, logWarn, logDebug]);
@@ -288,18 +288,23 @@ function MasaAsistani() {
 
   // --- Input'a Odaklanınca Karşılama ---
    const handleInputFocus = useCallback(async () => {
-    if (!karsilamaYapildi && API_BASE && !audioPlaying) { 
+    if (!karsilamaYapildi && API_BASE && !audioPlaying && menuUrunler.length > 0) { 
       const karsilamaKey = `karsilama_yapildi_${masaId}`;
       const greeting = `Merhaba, ben Neso! Fıstık Kafe sipariş asistanınızım. Masa ${masaId}'ye hoş geldiniz. Size nasıl yardımcı olabilirim?`;
-      logInfo("👋 Karşılama mesajı tetikleniyor...");
+      logInfo("👋 Karşılama mesajı tetikleniyor (input focus)...");
       setGecmis((prev) => [...prev, { type: 'neso', soru: "", cevap: greeting, timestamp: new Date().toISOString() }]);
       try {
         await sesliYanıtVer(greeting);
         if (typeof window !== 'undefined') { localStorage.setItem(karsilamaKey, 'true'); }
         setKarsilamaYapildi(true);
-      } catch (error) { logError("Karşılama mesajı seslendirilemedi:", error); }
+      } catch (error) { 
+        logError("Karşılama mesajı seslendirilemedi (input focus):", error); 
+        // Karşılama yapılamasa bile, karsilamaYapildi'yi true yapabiliriz ki tekrar denemesin.
+        if (typeof window !== 'undefined') { localStorage.setItem(karsilamaKey, 'true'); }
+        setKarsilamaYapildi(true);
+      }
     }
-  }, [karsilamaYapildi, masaId, sesliYanıtVer, logInfo, logError, API_BASE, audioPlaying]);
+  }, [karsilamaYapildi, masaId, sesliYanıtVer, logInfo, logError, API_BASE, audioPlaying, menuUrunler]);
 
 
   // --- Ana Mesaj Gönderme ve İşleme Fonksiyonu ---
@@ -307,13 +312,15 @@ function MasaAsistani() {
     const kullaniciMesaji = (gonderilecekMesaj ?? mesaj).trim();
     if (!kullaniciMesaji || loading || audioPlaying || micActive || iptalLoading) return;
 
-    logInfo(`➡️ Mesaj gönderiliyor: "${kullaniciMesaji}"`);
+    logInfo(`➡️ Kullanıcı mesajı gönderiliyor: "${kullaniciMesaji}"`);
     setLoading(true); setMesaj(""); setHataMesaji(null);
     setGecmis((prev) => [...prev, { type: 'user', soru: kullaniciMesaji, cevap: "...", timestamp: new Date().toISOString() }]);
 
-    let aiHamYanit = "";
-    let konusmaMetni = "Yanıtınız işleniyor...";
-    let siparisSepetiGonderilecek = [];
+    let aiHamYanit = ""; // AI'dan gelen ham string (JSON veya düz metin)
+    let konusmaMetniAI = "Yanıtınız işleniyor..."; // AI'dan gelen veya oluşturulan, kullanıcıya gösterilecek metin
+    let siparisSepetiKaydedilecek = []; // Backend'e gönderilecek doğrulanmış sepet
+    let currentAIActionStatus = null; // AI'ın aksiyon durumu (JSON'dan)
+    // let currentAISuggestedProduct = null; // AI'ın önerdiği ürün (JSON'dan, şu an için doğrudan kullanılmıyor ama loglanabilir)
 
     try {
       logInfo("Adım 1: AI Yanıtı alınıyor...");
@@ -321,124 +328,130 @@ function MasaAsistani() {
         logError("API_BASE tanımlı değil, AI yanıtı alınamıyor.");
         throw new Error("API adresi yapılandırılmamış.");
       }
-      const yanitRes = await axios.post(`${API_BASE}/yanitla`, { text: kullaniciMesaji, masa: masaId });
-      aiHamYanit = yanitRes.data.reply || "";
-      logInfo(`⬅️ AI yanıtı alındı (ham): "${aiHamYanit.substring(0, 150)}..."`);
+      
+      const requestPayload = {
+        text: kullaniciMesaji,
+        masa: masaId,
+        onceki_ai_durumu: lastAiResponseData // Bir önceki BAŞARILI ve PARSE EDİLMİŞ AI JSON yanıtını gönderiyoruz
+      };
+      logDebug("AI'a gönderilecek payload:", JSON.stringify(requestPayload, null, 2));
 
+      const yanitRes = await axios.post(`${API_BASE}/yanitla`, requestPayload);
+      aiHamYanit = yanitRes.data.reply || ""; 
+      logInfo(`⬅️ AI yanıtı alındı (ham): "${aiHamYanit.substring(0, 250)}..."`);
+
+      let parsedAIData = null;
       try {
-        const parsedAI = JSON.parse(aiHamYanit);
-        logInfo("AI yanıtı JSON olarak BAŞARIYLA parse edildi.", parsedAI);
+        parsedAIData = JSON.parse(aiHamYanit);
+        logInfo("AI yanıtı JSON olarak BAŞARIYLA parse edildi.", parsedAIData);
+        setLastAiResponseData(parsedAIData); // Başarılı JSON yanıtını bir sonraki istek için sakla
 
-        if (parsedAI.sepet && Array.isArray(parsedAI.sepet) && parsedAI.sepet.length > 0) {
-          siparisSepetiGonderilecek = parsedAI.sepet.map(item => {
-            const menuUrun = menuUrunler.find(m => m.ad === String(item.urun || "").toLowerCase().trim());
-            return {
-              urun: menuUrun ? menuUrun.orjinalAd : String(item.urun || "Bilinmeyen Ürün").trim(),
-              adet: parseInt(item.adet, 10) || 0,
-              fiyat: menuUrun ? menuUrun.fiyat : parseFloat(item.fiyat) || 0,
-              kategori: menuUrun ? menuUrun.kategori : String(item.kategori || "Bilinmeyen Kategori").trim()
-            };
-          }).filter(item => item.adet > 0 && item.urun !== "Bilinmeyen Ürün"); 
-          logDebug("AI JSON'ından ve menüden doğrulanan/oluşturulan geçerli sepet:", siparisSepetiGonderilecek);
+        konusmaMetniAI = parsedAIData.konusma_metni || "İsteğiniz anlaşıldı, işleniyor.";
+        currentAIActionStatus = parsedAIData.aksiyon_durumu || null;
+        // currentAISuggestedProduct = parsedAIData.onerilen_urun || null; // Gerekirse kullanılabilir
 
-          if (parsedAI.konusma_metni && typeof parsedAI.konusma_metni === 'string' && parsedAI.konusma_metni.trim()) {
-            konusmaMetni = parsedAI.konusma_metni;
-            logInfo("AI'dan özel konuşma metni alındı:", konusmaMetni);
-          } else { 
-            const itemsSummary = siparisSepetiGonderilecek.map(item => `${item.adet} ${item.urun}`).join(' ve ');
-            const toplamTutarHesaplanan = siparisSepetiGonderilecek.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
-            konusmaMetni = itemsSummary
-              ? `${itemsSummary} siparişinizi aldım. Toplam tutarınız ${toplamTutarHesaplanan.toFixed(2)} TL.`
-              : "Siparişinizde geçerli ürün bulunamadı.";
-            if (parsedAI.musteri_notu) { 
-              konusmaMetni += ` Notunuz: ${parsedAI.musteri_notu}`;
+        if (parsedAIData.sepet && Array.isArray(parsedAIData.sepet) && parsedAIData.sepet.length > 0) {
+          siparisSepetiKaydedilecek = parsedAIData.sepet.map(itemFromAI => {
+            const menuUrun = menuUrunler.find(m => 
+                m.orjinalAd === itemFromAI.urun || 
+                m.ad === String(itemFromAI.urun || "").toLowerCase().trim()
+            );
+            if (menuUrun && menuUrun.stok_durumu !== 0) {
+              return {
+                urun: menuUrun.orjinalAd,
+                adet: parseInt(itemFromAI.adet, 10) || 0,
+                fiyat: menuUrun.fiyat, 
+                kategori: menuUrun.kategori,
+                musteri_notu: itemFromAI.musteri_notu || ""
+              };
             }
-          }
-        } else { 
-          logWarn("AI JSON yanıtında geçerli 'sepet' alanı yok veya sepet boş. AI'ın konuşma metni veya ham yanıtı kullanılacak.");
-          konusmaMetni = parsedAI.konusma_metni || (typeof aiHamYanit === 'string' ? aiHamYanit : "Siparişinizi şuan için işleyemedim, lütfen daha net bir şekilde tekrar eder misiniz?");
-          siparisSepetiGonderilecek = []; 
+            logWarn(`Sepette AI tarafından gönderilen ürün '${itemFromAI.urun}' menüde bulunamadı/stokta yok, siparişten çıkarılıyor.`);
+            return null; 
+          }).filter(item => item && item.adet > 0); 
+          logDebug("AI JSON'ından ve menüden doğrulanan/oluşturulan geçerli sepet:", siparisSepetiKaydedilecek);
+        } else {
+          logInfo("AI JSON yanıtında sepet boş veya bulunmuyor.");
+          siparisSepetiKaydedilecek = [];
         }
       } catch (parseError) {
-        logWarn("AI yanıtı JSON olarak parse edilemedi, ham yanıt metin olarak kabul edilecek.", parseError);
-        konusmaMetni = aiHamYanit; 
-        siparisSepetiGonderilecek = []; 
+        logWarn(`AI yanıtı JSON olarak parse edilemedi (${parseError.message}), ham yanıt metin olarak kabul edilecek.`);
+        konusmaMetniAI = aiHamYanit; 
+        siparisSepetiKaydedilecek = []; 
+        setLastAiResponseData(null); // Geçersiz JSON, önceki AI durumunu temizle
+        currentAIActionStatus = "anlasilamadi_duz_metin"; // Özel bir durum, sipariş kaydetmeyi engellemek için
       }
-
-      setGecmis((prev) => prev.map((g, i) => i === prev.length - 1 ? { ...g, cevap: konusmaMetni, type: 'neso', timestamp: new Date().toISOString() } : g));
+      
+      // Kullanıcıya gösterilecek/seslendirilecek mesajı ayarla
+      setGecmis((prev) => prev.map((g, i) => i === prev.length - 1 ? { ...g, cevap: konusmaMetniAI, type: 'neso', timestamp: new Date().toISOString() } : g));
+      
       logInfo("Adım 2: Oluşturulan/Alınan konuşma metni seslendiriliyor...");
-      await sesliYanıtVer(konusmaMetni);
+      await sesliYanıtVer(konusmaMetniAI);
+      
       logInfo("Adım 3: Sipariş sepeti kontrol ediliyor...");
-      logDebug("Backend'e gönderilecek son sepet:", siparisSepetiGonderilecek);
+      logDebug("Backend'e gönderilebilecek nihai sepet:", siparisSepetiKaydedilecek);
 
-      if (siparisSepetiGonderilecek && siparisSepetiGonderilecek.length > 0) {
-        logInfo(`📦 Geçerli sipariş (${siparisSepetiGonderilecek.length} çeşit) bulundu, backend'e kaydediliyor...`);
+      const shouldSaveOrder = (currentAIActionStatus === "siparis_guncellendi" || currentAIActionStatus === "siparis_alindi") && 
+                               siparisSepetiKaydedilecek.length > 0;
+
+      if (shouldSaveOrder) {
+        logInfo(`📦 Geçerli sipariş (${siparisSepetiKaydedilecek.length} çeşit) bulundu ve aksiyon durumu ('${currentAIActionStatus}') sipariş kaydını gerektiriyor, backend'e kaydediliyor...`);
         const siparisData = {
           masa: String(masaId),
-          istek: kullaniciMesaji, 
+          istek: kullaniciMesaji,
           yanit: aiHamYanit, 
-          sepet: siparisSepetiGonderilecek.map(item => ({ 
-            urun: item.urun,
-            adet: item.adet,
-            fiyat: item.fiyat,
-            kategori: item.kategori 
-          }))
+          sepet: siparisSepetiKaydedilecek 
         };
         logDebug("Sipariş API'ye gönderiliyor (/siparis-ekle), Payload:", JSON.stringify(siparisData, null, 2));
+        
         try {
           const siparisRes = await axios.post(`${API_BASE}/siparis-ekle`, siparisData, {
-            headers: { "Content-Type": "application/json" } 
+            headers: { "Content-Type": "application/json" }
           });
           logInfo(`✅ Sipariş başarıyla kaydedildi. Backend Yanıtı:`, siparisRes.data);
           setSiparisDurumu("bekliyor"); 
-          
+
           if (siparisRes.data && siparisRes.data.siparisId) {
             setAktifSiparis({
               id: siparisRes.data.siparisId,
-              zaman: siparisRes.data.zaman || new Date().toISOString(), 
+              zaman: siparisRes.data.zaman || new Date().toISOString(),
               iptalEdilemez: false
             });
-            setIptalKalanSure(120); 
+            setIptalKalanSure(120);
             logInfo(`Aktif sipariş ayarlandı: ID ${siparisRes.data.siparisId}, Zaman: ${siparisRes.data.zaman || 'Frontend Saati'}`);
           }
-          
         } catch (siparisHata) {
           logError("❌ Sipariş kaydetme API hatası:", siparisHata.response || siparisHata);
           let hataDetayi = "Bilinmeyen API hatası.";
-          if (siparisHata.response && siparisHata.response.data) {
-            if (typeof siparisHata.response.data.detail === 'string') {
-              hataDetayi = siparisHata.response.data.detail;
-            } else if (Array.isArray(siparisHata.response.data.detail)) {
-              hataDetayi = siparisHata.response.data.detail.map(err => `${err.loc.join(' -> ')}: ${err.msg}`).join(', ');
-            } else if (typeof siparisHata.response.data === 'string') { 
-              hataDetayi = siparisHata.response.data;
-            }
-          } else if (siparisHata.message) {
-            hataDetayi = siparisHata.message;
-          }
+          if (siparisHata.response?.data) {
+            if (typeof siparisHata.response.data.detail === 'string') hataDetayi = siparisHata.response.data.detail;
+            else if (Array.isArray(siparisHata.response.data.detail)) hataDetayi = siparisHata.response.data.detail.map(err => `${err.loc?.join('->') || 'alan'}: ${err.msg}`).join(', ');
+            else if (typeof siparisHata.response.data === 'string') hataDetayi = siparisHata.response.data;
+          } else if (siparisHata.message) hataDetayi = siparisHata.message;
           setHataMesaji(`Siparişiniz kaydedilemedi: ${hataDetayi}`);
           setGecmis((prev) => [...prev, { type: 'hata', soru: "", cevap: `Sipariş gönderilemedi: ${hataDetayi}`, timestamp: new Date().toISOString() }]);
         }
       } else {
-        logInfo("ℹ️ AI yanıtından kaydedilecek bir sipariş oluşturulamadı.");
+        logInfo(`ℹ️ AI yanıtından kaydedilecek bir sipariş oluşturulamadı veya aksiyon durumu ('${currentAIActionStatus}') sipariş kaydını gerektirmiyor.`);
       }
     } catch (error) { 
       logError("❌ Mesaj gönderme/işleme genel hatası:", error);
       const hataDetayi = error.response?.data?.detail || error.message || "Bilinmeyen bir hata oluştu.";
       setHataMesaji(`İşlem sırasında bir hata oluştu: ${hataDetayi}`);
       setGecmis((prev) => prev.map((g, i) => i === prev.length - 1 && g.cevap === "..." ? { ...g, cevap: `Üzgünüm, bir hata oluştu. (${hataDetayi})`, type: 'hata', timestamp: new Date().toISOString() } : g));
+      setLastAiResponseData(null); // Genel hata durumunda da önceki AI durumunu temizle
     } finally {
       logInfo("Adım 5: İşlem tamamlandı (finally).");
       setLoading(false);
     }
-  }, [mesaj, loading, audioPlaying, micActive, API_BASE, masaId, sesliYanıtVer, menuUrunler, logInfo, logError, logWarn, logDebug, iptalLoading]);
+  }, [mesaj, loading, audioPlaying, micActive, API_BASE, masaId, sesliYanıtVer, menuUrunler, logInfo, logError, logWarn, logDebug, iptalLoading, lastAiResponseData]);
+
 
   // --- Ses Tanıma Fonksiyonları ---
   const sesiDinle = useCallback(() => {
-    if (!SpeechRecognition) { logError("🚫 Tarayıcı ses tanımayı desteklemiyor."); alert("Tarayıcı ses tanımayı desteklemiyor."); return; }
+    if (!SpeechRecognition) { logError("🚫 Tarayıcı ses tanımayı desteklemiyor."); alert("Tarayıcınız sesle komut özelliğini desteklemiyor."); return; }
     if (micActive && recognitionRef.current) {
       logInfo("🎤 Mikrofon kapatılıyor (manuel).");
-      try { recognitionRef.current.stop(); } catch (e) { logError("Mic stop hatası", e); }
+      try { recognitionRef.current.stop(); } catch (e) { logError("Mikrofon durdurulurken hata:", e); }
       return; 
     }
     if (audioPlaying) { 
@@ -452,32 +465,38 @@ function MasaAsistani() {
       recognizer.lang = "tr-TR";
       recognizer.continuous = false; 
       recognizer.interimResults = false; 
+
       recognizer.onstart = () => { logInfo("🎤 Dinleme başladı."); setMicActive(true); };
+      
       recognizer.onresult = async (event) => {
         const transcript = event.results[0][0].transcript;
         logInfo(`👂 Ses tanıma sonucu: "${transcript}"`);
+        // gonder fonksiyonu mesajı aldıktan sonra mesaj state'ini temizlediği için
+        // burada setMesaj(transcript) yapıp sonra gonder() demek yerine
+        // doğrudan gonder(transcript) demek daha doğru.
         await gonder(transcript); 
       };
+      
       recognizer.onerror = (event) => {
-        logError("🎤 Ses tanıma hatası:", event.error);
+        logError("🎤 Ses tanıma hatası:", event.error, event);
         let errorMsg = `Ses tanıma hatası: ${event.error}`;
-        if (event.error === 'no-speech') {
-            errorMsg = "Ses algılanamadı, lütfen tekrar deneyin.";
-        } else if (event.error === 'audio-capture') {
-            errorMsg = "Mikrofon erişim sorunu. Lütfen izinleri kontrol edin.";
-        } else if (event.error === 'not-allowed') {
-            errorMsg = "Mikrofon kullanımı engellendi. Lütfen izinleri kontrol edin.";
-        }
-        if (event.error !== 'aborted') { 
+        if (event.error === 'no-speech') errorMsg = "Ses algılanamadı, lütfen tekrar deneyin.";
+        else if (event.error === 'audio-capture') errorMsg = "Mikrofon erişim sorunu. Lütfen izinleri kontrol edin.";
+        else if (event.error === 'not-allowed') errorMsg = "Mikrofon kullanımı engellendi. Lütfen sayfa izinlerini kontrol edin.";
+        
+        if (event.error !== 'aborted') { // Kullanıcı manuel durdurduysa (stop() çağrılırsa 'aborted' olabilir) hata gösterme
             setHataMesaji(errorMsg);
         }
       };
+      
       recognizer.onend = () => {
         logInfo("🏁 Ses tanıma bitti/durduruldu.");
         setMicActive(false); 
         recognitionRef.current = null; 
       };
+      
       recognizer.start();
+
     } catch (err) {
       logError("🎤 Mikrofon başlatılamadı/kritik hata:", err);
       setHataMesaji("Mikrofon başlatılamadı. Lütfen sayfa için mikrofon izinlerini kontrol edin.");
@@ -492,26 +511,27 @@ function MasaAsistani() {
   // --- Ses Durdurma ---
   const durdur = useCallback(() => {
     if (audioRef.current && !audioRef.current.paused) {
-      logInfo("🛑 Backend TTS konuşması durduruluyor.");
+      logInfo("🛑 Backend TTS konuşması durduruluyor (kullanıcı isteği).");
       audioRef.current.pause();
       audioRef.current.currentTime = 0; 
-      if (audioRef.current.src.startsWith('blob:')) { 
+      if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) { 
         URL.revokeObjectURL(audioRef.current.src);
       }
+      audioRef.current.src = '';
       audioRef.current = null; 
     }
-    if (synth && synth.speaking) { 
-      logInfo("🛑 Tarayıcı TTS konuşması durduruldu.");
+    if (synth && synth.speaking) { // Tarayıcının kendi TTS'i için (şu an kullanılmıyor ama genel bir durdurma)
+      logInfo("🛑 Tarayıcı TTS konuşması durduruldu (kullanıcı isteği).");
       synth.cancel();
     }
     setAudioPlaying(false); 
-  }, [synth, logInfo]);
+  }, [logInfo]);
 
 
   // --- Sipariş İptal Süresi Takibi ---
   useEffect(() => {
     let intervalId = null;
-    if (aktifSiparis && aktifSiparis.zaman && !aktifSiparis.iptalEdilemez && (siparisDurumu === 'bekliyor' || siparisDurumu === 'hazirlaniyor')) {
+    if (aktifSiparis && aktifSiparis.id && aktifSiparis.zaman && !aktifSiparis.iptalEdilemez && (siparisDurumu === 'bekliyor' || siparisDurumu === 'hazirlaniyor')) {
       logDebug(`İptal süresi takibi başlatılıyor. Sipariş Zamanı: ${aktifSiparis.zaman}, ID: ${aktifSiparis.id}`);
       intervalId = setInterval(() => {
         const olusturmaZamaniMs = new Date(aktifSiparis.zaman).getTime();
@@ -523,13 +543,18 @@ function MasaAsistani() {
           setIptalKalanSure(kalanSn);
         } else {
           setIptalKalanSure(0);
-          logInfo(`Sipariş ${aktifSiparis.id} için iptal süresi doldu (useEffect).`);
+          logInfo(`Sipariş ${aktifSiparis.id} için iptal süresi doldu (useEffect timer).`);
           setAktifSiparis(prev => prev ? { ...prev, iptalEdilemez: true } : null);
           if (intervalId) clearInterval(intervalId); 
         }
       }, 1000);
     } else {
-      setIptalKalanSure(0);
+      // Aktif sipariş yoksa veya durumu iptale uygun değilse/süresi dolmuşsa sayacı sıfırla
+      if (iptalKalanSure !== 0) setIptalKalanSure(0);
+      if (aktifSiparis && (siparisDurumu !== 'bekliyor' && siparisDurumu !== 'hazirlaniyor') && !aktifSiparis.iptalEdilemez) {
+          // Durum değiştiyse ve henüz iptal edilemez değilse, iptal edilemez yap.
+          setAktifSiparis(prev => prev ? { ...prev, iptalEdilemez: true } : null);
+      }
     }
     return () => {
       if (intervalId) {
@@ -537,7 +562,7 @@ function MasaAsistani() {
         clearInterval(intervalId);
       }
     };
-  }, [aktifSiparis, siparisDurumu, logDebug, logInfo]);
+  }, [aktifSiparis, siparisDurumu, logDebug, logInfo, iptalKalanSure]);
 
 
   // --- Sipariş İptal Fonksiyonu ---
@@ -551,6 +576,7 @@ function MasaAsistani() {
         logWarn(`Sipariş ${aktifSiparis.id} için iptal süresi dolmuş veya iptal edilemez durumda.`);
         setHataMesaji("Bu sipariş artık iptal edilemez.");
         setAktifSiparis(prev => prev ? { ...prev, iptalEdilemez: true } : null); 
+        setIptalKalanSure(0);
         return;
     }
 
@@ -560,22 +586,24 @@ function MasaAsistani() {
 
     try {
       const response = await axios.post(`${API_BASE}/musteri/siparis/${aktifSiparis.id}/iptal?masa_no=${masaId}`);
-      logInfo("Sipariş iptal yanıtı:", response.data);
+      logInfo("Sipariş iptal API yanıtı:", response.data);
       
+      // WebSocket'ten durum güncellemesi gelene kadar frontend'i hemen güncelle
       setSiparisDurumu('iptal'); 
       const iptalMesaji = response.data.message || "Siparişiniz başarıyla iptal edildi.";
       setGecmis(prev => [...prev, { type: 'neso', soru: "", cevap: iptalMesaji, timestamp: new Date().toISOString() }]);
       await sesliYanıtVer(iptalMesaji);
 
-      setAktifSiparis(null); 
+      setAktifSiparis(null); // İptal başarılı, aktif siparişi temizle
       setIptalKalanSure(0); 
 
     } catch (error) {
-      logError("Sipariş iptal hatası:", error.response || error);
+      logError("Sipariş iptal API hatası:", error.response || error);
       const hataDetayi = error.response?.data?.detail || error.message || "Sipariş iptal edilemedi.";
       setHataMesaji(hataDetayi);
       setGecmis(prev => [...prev, { type: 'hata', soru: "", cevap: `Sipariş iptal edilemedi: ${hataDetayi}`, timestamp: new Date().toISOString() }]);
-      await sesliYanıtVer(`Üzgünüm, siparişiniz iptal edilirken bir sorun oluştu. Lütfen yetkililere bildirin.`);
+      // Hata durumunda sesli yanıt vermek kullanıcı deneyimini iyileştirebilir.
+      await sesliYanıtVer(`Üzgünüm, siparişiniz iptal edilirken bir sorun oluştu. Lütfen bir yetkiliye bildirin.`);
     } finally {
       setIptalLoading(false); 
     }
@@ -587,69 +615,61 @@ function MasaAsistani() {
     try {
       return new Date(isoString).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
-      return "";
+      logWarn("Geçersiz zaman damgası formatı:", isoString, e);
+      return "hatalı saat";
     }
   };
 
-  const { text: durumMesaji, style: durumStili, icon: durumIconu } = getDurumTextAndStyle(siparisDurumu);
+  const { text: durumMesajiText, style: durumStili, icon: durumIconu } = getDurumTextAndStyle(siparisDurumu);
 
   return (
-    // Ana Kapsayıcı: Fıstık Kafe temasına uygun sakin bir arka plan
-    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50 to-green-100 flex items-center justify-center p-2 sm:p-4 font-['Nunito',_sans-serif]"> {/* Font için Nunito veya benzeri bir font */}
-      {/* İçerik Kartı: Yumuşak gölgeler ve yuvarlak köşeler */}
+    <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50 to-green-100 flex items-center justify-center p-2 sm:p-4 font-['Nunito',_sans-serif]">
       <div className="bg-white/80 backdrop-blur-lg shadow-2xl rounded-3xl p-4 sm:p-6 w-full max-w-lg text-slate-700 border border-white/30">
-        {/* Başlık ve Logo Alanı */}
         <div className="flex flex-col items-center justify-center mb-4 space-y-2">
           <img src={NesoLogo} alt="NESO Logo" className="h-16 w-16 sm:h-20 sm:w-20" />
           <h1 className="text-2xl sm:text-3xl font-bold text-green-700">Neso Asistan</h1>
           <p className="text-sm text-amber-700 font-semibold bg-amber-100 px-3 py-1 rounded-full shadow-sm">Masa No: {masaId}</p>
         </div>
 
-        {/* Hata Mesajı Alanı */}
         {hataMesaji && (
           <div className="bg-red-100 border border-red-300 text-red-700 px-3 py-2.5 rounded-xl mb-4 text-sm text-center shadow-md break-words">
             <span className="font-semibold">⚠️ Hata:</span> {hataMesaji}
           </div>
         )}
 
-        {/* Sipariş Durum Bildirimi */}
-        {durumMesaji && (
+        {durumMesajiText && (
           <div className={`px-4 py-3 rounded-xl mb-4 text-sm text-center font-semibold shadow-md flex items-center justify-center gap-2 ${durumStili}`}>
             <span>{durumIconu}</span>
-            <span>{durumMesaji}</span>
+            <span>{durumMesajiText}</span>
           </div>
         )}
         
-        {/* Sipariş İptal Butonu */}
         {aktifSiparis && aktifSiparis.id && !aktifSiparis.iptalEdilemez && iptalKalanSure > 0 && (siparisDurumu === 'bekliyor' || siparisDurumu === 'hazirlaniyor') && (
           <div className="my-3">
             <button
               onClick={handleSiparisIptal}
               disabled={iptalLoading || loading || audioPlaying || micActive}
-              className={`w-full py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50 transition duration-200 ease-in-out active:scale-[0.98] shadow-lg hover:shadow-red-400/50 ${iptalLoading || loading ? "opacity-70 cursor-not-allowed" : ""}`}
+              className={`w-full py-3 rounded-xl font-semibold text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50 transition duration-200 ease-in-out active:scale-[0.98] shadow-lg hover:shadow-red-400/50 ${iptalLoading || loading || audioPlaying || micActive ? "opacity-70 cursor-not-allowed" : ""}`}
             >
               {iptalLoading ? <LoadingSpinner /> : `Siparişi İptal Et (${Math.floor(iptalKalanSure / 60)}:${(iptalKalanSure % 60).toString().padStart(2, '0')})`}
             </button>
           </div>
         )}
-        {/* İptal Süresi Doldu Mesajı */}
-        {aktifSiparis && aktifSiparis.iptalEdilemez && (siparisDurumu === 'bekliyor' || siparisDurumu === 'hazirlaniyor') && iptalKalanSure <=0 && (
+        {aktifSiparis && aktifSiparis.id && aktifSiparis.iptalEdilemez && (siparisDurumu === 'bekliyor' || siparisDurumu === 'hazirlaniyor') && iptalKalanSure <=0 && (
           <p className="text-xs text-center text-amber-600 my-2 font-medium">Bu sipariş için iptal süresi dolmuştur.</p>
         )}
 
-        {/* Mesaj Giriş Alanı */}
         <input
           type="text"
           value={mesaj}
           onChange={(e) => setMesaj(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !loading && !audioPlaying && !micActive && !iptalLoading) gonder(); }}
           onFocus={handleInputFocus}
-          placeholder={micActive ? "Dinleniyor..." : (!karsilamaYapildi ? "Merhaba! Başlamak için tıklayın..." : "Ne arzu edersiniz?")}
+          placeholder={micActive ? "Dinleniyor..." : (loading ? "Yanıt bekleniyor..." : (!karsilamaYapildi ? "Merhaba! Başlamak için tıklayın..." : "Ne arzu edersiniz?"))}
           className="w-full p-3.5 mb-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200 shadow-inner text-sm sm:text-base"
           disabled={loading || audioPlaying || micActive || iptalLoading}
         />
 
-        {/* Aksiyon Butonları */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <button
             onClick={() => gonder()}
@@ -665,16 +685,15 @@ function MasaAsistani() {
           <button
             onClick={sesiDinle}
             disabled={loading || audioPlaying || !SpeechRecognition || iptalLoading}
-            className={`col-span-1 py-3 rounded-xl font-bold transition duration-200 ease-in-out active:scale-[0.98] shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base ${micActive ? "bg-red-500 hover:bg-red-600 text-white" : "bg-sky-500 hover:bg-sky-600 text-white"
+            className={`col-span-1 py-3 rounded-xl font-bold transition duration-200 ease-in-out active:scale-[0.98] shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base ${micActive ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-sky-500 hover:bg-sky-600 text-white"
               } ${loading || audioPlaying || !SpeechRecognition || iptalLoading ? "opacity-60 cursor-not-allowed" : ""}`}
             aria-label={micActive ? "Dinlemeyi Durdur" : "Sesli Komut Ver"}
             title={!SpeechRecognition ? "Tarayıcı bu özelliği desteklemiyor" : (micActive ? "Dinlemeyi Durdur" : "Sesli Komut Ver")}
           >
-            <MicIcon /> {micActive && <span className="animate-pulse">Dinliyor</span>}
+            <MicIcon /> {micActive && <span>Dinliyor</span>}
           </button>
         </div>
 
-        {/* Konuşmayı Durdur Butonu (Sadece ses oynatılırken görünür) */}
         {audioPlaying && (
              <button
                 onClick={durdur}
@@ -685,8 +704,6 @@ function MasaAsistani() {
             </button>
         )}
 
-
-        {/* Mesaj Geçmişi Alanı */}
         <div
           ref={mesajKutusuRef}
           className="h-72 overflow-y-auto space-y-3 bg-slate-100/70 p-3 rounded-xl scrollbar-thin scrollbar-thumb-slate-400/70 scrollbar-track-slate-200/50 scrollbar-corner-transparent shadow-inner"
@@ -697,9 +714,8 @@ function MasaAsistani() {
               <div className={`p-2.5 rounded-xl max-w-[85%] shadow-sm text-sm sm:text-base ${
                   g.type === 'user' ? 'bg-green-600 text-white rounded-br-none' :
                   g.type === 'neso' ? 'bg-slate-600 text-white rounded-bl-none' :
-                  'bg-red-100 text-red-700 border border-red-300' // Hata mesajı için
+                  'bg-red-100 text-red-700 border border-red-300' 
               }`}>
-                {/* Mesaj Başlığı (Neso veya Siz) ve Zaman Damgası */}
                 <div className="flex justify-between items-baseline mb-0.5">
                     <span className={`font-semibold text-xs opacity-80 ${g.type === 'user' ? 'text-green-100' : g.type === 'neso' ? 'text-slate-300' : 'text-red-500'}`}>
                         {g.type === 'user' ? 'Siz' : g.type === 'neso' ? 'Neso Asistan' : 'Sistem'}
@@ -710,20 +726,23 @@ function MasaAsistani() {
                         </span>
                     )}
                 </div>
-                {/* Mesaj İçeriği */}
                 <span className="break-words leading-relaxed">
                     {g.cevap === "..." ? <LoadingSpinner /> : g.cevap}
                 </span>
               </div>
             </div>
           ))}
-          {/* Yükleme ve Bağlantı Durumları için Ek Mesajlar */}
           {loading && gecmis.length === 0 && ( 
             <div className="text-center text-sm text-slate-500 opacity-70 animate-pulse py-4">Bağlanılıyor veya yanıt bekleniyor...</div>
           )}
-          {!loading && gecmis.length === 0 && !hataMesaji && (
+          {!loading && gecmis.length === 0 && !hataMesaji && menuUrunler.length > 0 && ( // Menü yüklendiyse bu mesajı göster
              <div className="text-center text-sm text-slate-500 opacity-80 py-4">
-                {karsilamaYapildi ? "Sohbete başlamak için yazın veya mikrofonu kullanın." : "Merhaba! Neso Asistan'a hoş geldiniz."}
+                {karsilamaYapildi ? "Sohbete başlamak için yazın veya mikrofonu kullanın." : "Merhaba! Neso Asistan'a hoş geldiniz. Başlamak için bir şeyler yazın veya mikrofona tıklayın."}
+             </div>
+          )}
+          {!loading && gecmis.length === 0 && !hataMesaji && menuUrunler.length === 0 && API_BASE &&( // Menü henüz yüklenmediyse
+             <div className="text-center text-sm text-slate-500 opacity-80 py-4">
+                Menü yükleniyor, lütfen bekleyin...
              </div>
           )}
         </div>
