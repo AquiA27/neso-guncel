@@ -37,8 +37,11 @@ import {
   ChevronUp,
   ShoppingBag,
   ClipboardList,
-  ListPlus, // Yeni eklenen ikon
-  FilePlus, // Yeni eklenen ikon
+  ListPlus,
+  FilePlus,
+  BookOpenText, // YENİ EKLENEN İKON (Reçete için)
+  ListOrdered, // YENİ EKLENEN İKON (Reçete için)
+  ClipboardPlus, // YENİ EKLENEN İKON (Reçete için)
 } from "lucide-react";
 import apiClient from '../services/apiClient';
 import { AuthContext } from '../AuthContext';
@@ -112,13 +115,13 @@ function AdminPaneli() {
 
   // Menü Yönetimi State'leri
   const [menu, setMenu] = useState([]);
-  const initialYeniUrunState = { ad: "", fiyat: "", kategori: "" }; // kategori adı olarak alacağız, ID değil
+  const initialYeniUrunState = { ad: "", fiyat: "", kategori: "" };
   const [yeniUrun, setYeniUrun] = useState(initialYeniUrunState);
   const [silUrunAdi, setSilUrunAdi] = useState("");
   const [menuKategorileri, setMenuKategorileri] = useState([]);
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState(null);
-  const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false); // Yeni ürün ekleme modalı için
+  const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
 
   // Kullanıcı Yönetimi State'leri
   const [kullanicilar, setKullanicilar] = useState([]);
@@ -144,11 +147,30 @@ function AdminPaneli() {
   const [stokKalemiToDelete, setStokKalemiToDelete] = useState(null);
   const [selectedStokKategoriFilter, setSelectedStokKategoriFilter] = useState("");
 
+  // YENİ EKLENEN: Reçete Yönetimi State'leri
+  const [menuUrunReceteleri, setMenuUrunReceteleri] = useState([]);
+  const [menuItemsForRecipe, setMenuItemsForRecipe] = useState([]);
+  const [stockItemsForRecipe, setStockItemsForRecipe] = useState([]);
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const initialEditingRecipeState = {
+    id: null,
+    menu_urun_id: "",
+    aciklama: "",
+    porsiyon_birimi: "adet",
+    porsiyon_miktari: 1,
+    bilesenler: [], // [{ stok_kalemi_id: "", miktar: "", birim: "" }, ...]
+  };
+  const [editingRecipe, setEditingRecipe] = useState(initialEditingRecipeState);
+  const [recipeToDelete, setRecipeToDelete] = useState(null);
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
+  // YENİ EKLENEN KISIM SONU
+
   // Yükleme Durumları
   const [loadingDashboardStats, setLoadingDashboardStats] = useState(false);
   const [loadingMenu, setLoadingMenu] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingStok, setLoadingStok] = useState(false);
+
 
   const logInfo = useCallback((message) => console.log(`[Admin Paneli] INFO: ${message}`), []);
   const logError = useCallback((message, errorObj) => console.error(`[Admin Paneli] ERROR: ${message}`, errorObj || ""), []);
@@ -175,7 +197,7 @@ function AdminPaneli() {
       setMenuKategorileri(response.data || []);
     } catch (err) { handleApiError(err, "Menü kategorileri alınamadı", "Menü Kategorileri"); }
     finally { setLoadingMenu(false); }
-  }, [logInfo, handleApiError, setLoadingMenu, setMenuKategorileri, setError]);
+  }, [logInfo, handleApiError]);
 
   const kullanicilariGetir = useCallback(async () => {
     logInfo("👥 Kullanıcılar getiriliyor...");
@@ -185,7 +207,7 @@ function AdminPaneli() {
       setKullanicilar(response.data || []);
     } catch (err) { handleApiError(err, "Kullanıcı listesi alınamadı", "Kullanıcı Listeleme"); }
     finally { setLoadingUsers(false); }
-  }, [logInfo, handleApiError, setLoadingUsers, setKullanicilar, setError]);
+  }, [logInfo, handleApiError]);
 
   const verileriGetir = useCallback(async () => {
     logInfo(`🔄 Dashboard verileri ve menü ürünleri getiriliyor...`);
@@ -213,7 +235,7 @@ function AdminPaneli() {
       setMenu(menuRes?.data?.menu || []);
     } catch (err) { handleApiError(err, "Dashboard verileri alınamadı.", "Dashboard Veri Çekme"); }
     finally { setLoadingDashboardStats(false); }
-  }, [logInfo, handleApiError, setLoadingDashboardStats, setOrders, setGunluk, setAylik, setPopuler, setAktifMasaOzetleri, setYillikChartData, setMenu, setError]);
+  }, [logInfo, handleApiError]);
 
   const fetchStokKategorileri = useCallback(async () => {
     logInfo("🧺 Stok kategorileri getiriliyor...");
@@ -223,7 +245,7 @@ function AdminPaneli() {
       setStokKategorileri(response.data || []);
     } catch (err) { handleApiError(err, "Stok kategorileri alınamadı.", "Stok Kategorileri"); }
     finally { setLoadingStok(false); }
-  }, [logInfo, handleApiError, setLoadingStok, setStokKategorileri, setError]);
+  }, [logInfo, handleApiError]);
 
   const fetchStokKalemleri = useCallback(async (kategoriId = null) => {
     logInfo(`📦 Stok kalemleri getiriliyor (Kategori ID: ${kategoriId || 'Tümü'})...`);
@@ -235,7 +257,43 @@ function AdminPaneli() {
       setStokKalemleri(response.data || []);
     } catch (err) { handleApiError(err, "Stok kalemleri alınamadı.", "Stok Kalemleri"); }
     finally { setLoadingStok(false); }
-  }, [logInfo, handleApiError, setLoadingStok, setStokKalemleri, setError]);
+  }, [logInfo, handleApiError]);
+
+  // YENİ EKLENEN: Reçete verilerini çekme fonksiyonları
+  const fetchMenuUrunReceteleri = useCallback(async () => {
+    logInfo("🍲 Menü ürün reçeteleri getiriliyor...");
+    setLoadingRecipes(true); setError(null);
+    try {
+      // Backend'de bu endpoint'in oluşturulması gerekecek: GET /admin/receteler
+      const response = await apiClient.get("/admin/receteler");
+      setMenuUrunReceteleri(response.data || []);
+    } catch (err) { handleApiError(err, "Reçeteler alınamadı", "Reçete Listeleme"); }
+    finally { setLoadingRecipes(false); }
+  }, [logInfo, handleApiError]);
+
+  const fetchMenuItemsForRecipeSelection = useCallback(async () => {
+    logInfo("🍜 Reçete için menü ürünleri (basit liste) getiriliyor...");
+    setLoadingMenu(true);
+    try {
+      // Backend'de bu endpoint'in oluşturulması lazım: GET /admin/menu-items-simple
+      const response = await apiClient.get("/admin/menu-items-simple");
+      setMenuItemsForRecipe(response.data || []);
+    } catch (err) { handleApiError(err, "Menü ürünleri (reçete için) alınamadı", "Yardımcı Menü Listesi"); }
+    finally { setLoadingMenu(false); }
+  }, [logInfo, handleApiError]);
+
+  const fetchStockItemsForRecipeSelection = useCallback(async () => {
+    logInfo("🧱 Reçete için stok kalemleri (basit liste) getiriliyor...");
+    setLoadingStok(true);
+    try {
+      // Backend'de bu endpoint'in oluşturulması lazım: GET /admin/stock-items-simple
+      const response = await apiClient.get("/admin/stock-items-simple");
+      setStockItemsForRecipe(response.data || []);
+    } catch (err) { handleApiError(err, "Stok kalemleri (reçete için) alınamadı", "Yardımcı Stok Listesi"); }
+    finally { setLoadingStok(false); }
+  }, [logInfo, handleApiError]);
+  // YENİ EKLENEN KISIM SONU
+
 
   const refreshAllAdminData = useCallback(() => {
     logInfo("🔄 Tüm admin verileri yenileniyor...");
@@ -244,7 +302,11 @@ function AdminPaneli() {
     fetchMenuKategorileri();
     fetchStokKategorileri();
     fetchStokKalemleri(selectedStokKategoriFilter || null);
-  }, [verileriGetir, kullanicilariGetir, fetchMenuKategorileri, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, logInfo]);
+    fetchMenuUrunReceteleri(); // YENİ EKLENDİ
+    // Modal açıldığında veya ihtiyaç duyulduğunda çağrılacakları için burada genel refresh'e eklemeye gerek yok gibi duruyor.
+    // fetchMenuItemsForRecipeSelection(); 
+    // fetchStockItemsForRecipeSelection();
+  }, [verileriGetir, kullanicilariGetir, fetchMenuKategorileri, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, logInfo]); // YENİ: fetchMenuUrunReceteleri eklendi
 
   useEffect(() => {
     if (!loadingAuth) {
@@ -255,7 +317,7 @@ function AdminPaneli() {
     }
   }, [isAuthenticated, userRole, loadingAuth, navigate, refreshAllAdminData]);
 
-  useEffect(() => { // WebSocket
+  useEffect(() => {
     if (!isAuthenticated || userRole !== 'admin' || loadingAuth) {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) { wsRef.current.close(1000, "User not admin or logged out"); wsRef.current = null; }
       return;
@@ -277,10 +339,11 @@ function AdminPaneli() {
             const message = JSON.parse(event.data);
             logInfo(`📥 Admin WS mesajı: Tip: ${message.type}`);
             if (["siparis", "durum", "masa_durum"].includes(message.type)) { verileriGetir(); }
-            else if (message.type === "menu_guncellendi") { fetchMenuKategorileri(); verileriGetir(); } // Menü kategorilerini de çekelim, ürün ekle/sil sonrası gerekebilir
+            else if (message.type === "menu_guncellendi") { fetchMenuKategorileri(); verileriGetir(); fetchMenuItemsForRecipeSelection(); }
             else if (message.type === "kategori_guncellendi") { fetchMenuKategorileri(); verileriGetir(); }
-            else if (message.type === "stok_guncellendi") { fetchStokKategorileri(); fetchStokKalemleri(selectedStokKategoriFilter || null); }
+            else if (message.type === "stok_guncellendi") { fetchStokKategorileri(); fetchStokKalemleri(selectedStokKategoriFilter || null); fetchStockItemsForRecipeSelection(); }
             else if (message.type === "kullanici_guncellendi") { kullanicilariGetir(); }
+            else if (message.type === "recete_guncellendi") { fetchMenuUrunReceteleri(); } // YENİ EKLENDİ
           } catch (err) { logError("Admin WS mesaj işleme hatası:", err); }
         };
         wsRef.current.onerror = (err) => { logError("❌ Admin WS hatası:", err); setError("WS bağlantı hatası."); };
@@ -298,7 +361,7 @@ function AdminPaneli() {
       else if (isAuthenticated && userRole === 'admin' && !wsRef.current) { connectWebSocket(); }
     }, 30000);
     return () => { clearInterval(pingIntervalId); if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId); if (wsRef.current) { wsRef.current.close(1000, "Component unmounting"); wsRef.current = null;}};
-  }, [isAuthenticated, userRole, loadingAuth, verileriGetir, fetchMenuKategorileri, kullanicilariGetir, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, logInfo, logError, setError]);
+  }, [isAuthenticated, userRole, loadingAuth, verileriGetir, fetchMenuKategorileri, kullanicilariGetir, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, fetchMenuItemsForRecipeSelection, fetchStockItemsForRecipeSelection, logInfo, logError, setError]); // YENİ: fetchMenuUrunReceteleri ve diğerleri eklendi.
 
   const urunEkle = useCallback(async (e) => {
     e.preventDefault();
@@ -307,47 +370,50 @@ function AdminPaneli() {
     if (isNaN(fiyatNum) || fiyatNum <= 0) { alert("Lütfen geçerli bir pozitif fiyat girin."); return; }
     setLoadingMenu(true); setError(null);
     try {
-      // `main.py`'deki `/menu/ekle` endpoint'i `kategori` alanını kategori adı olarak bekliyor.
       await apiClient.post(`/menu/ekle`, { ad: yeniUrun.ad.trim(), fiyat: fiyatNum, kategori: yeniUrun.kategori.trim() });
       alert("Ürün başarıyla eklendi.");
       setYeniUrun(initialYeniUrunState);
-      setShowAddMenuItemModal(false); // Modalı kapat
+      setShowAddMenuItemModal(false);
       await verileriGetir();
-      await fetchMenuKategorileri(); // Kategori listesi değişmiş olabilir (yeni kategori otomatik eklendiyse)
+      await fetchMenuKategorileri();
+      await fetchMenuItemsForRecipeSelection();
     } catch (err) { handleApiError(err, "Ürün eklenemedi", "Menü Ürün Ekleme"); }
     finally { setLoadingMenu(false); }
-  }, [yeniUrun, verileriGetir, fetchMenuKategorileri, handleApiError, initialYeniUrunState]);
+  }, [yeniUrun, verileriGetir, fetchMenuKategorileri, fetchMenuItemsForRecipeSelection, handleApiError, initialYeniUrunState]);
 
   const urunSil = useCallback(async (e) => {
     e.preventDefault();
     if (!silUrunAdi.trim()) { alert("Lütfen silinecek ürünün adını girin."); return; }
     const urunAdiTrimmed = silUrunAdi.trim();
-    if (!window.confirm(`'${urunAdiTrimmed}' adlı ürünü menüden silmek istediğinize emin misiniz?`)) return;
+    if (!window.confirm(`'${urunAdiTrimmed}' adlı ürünü menüden silmek istediğinize emin misiniz? Bu işlem aynı zamanda bu ürüne ait reçeteyi de silebilir (backend ayarına göre).`)) return;
     setLoadingMenu(true); setError(null);
     try {
-      // `main.py`'deki `/menu/sil` endpoint'i `urun_adi` query parametresi bekliyor.
       await apiClient.delete(`/menu/sil`, { params: { urun_adi: urunAdiTrimmed } });
       alert("Ürün başarıyla silindi.");
       setSilUrunAdi("");
       await verileriGetir();
+      await fetchMenuItemsForRecipeSelection();
+      await fetchMenuUrunReceteleri();
     } catch (err) { handleApiError(err, "Ürün silinemedi", "Menü Ürün Silme"); }
     finally { setLoadingMenu(false); }
-  }, [silUrunAdi, verileriGetir, handleApiError]);
+  }, [silUrunAdi, verileriGetir, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
 
   const openDeleteCategoryModal = (kategori) => { setCategoryToDelete(kategori); setShowDeleteCategoryModal(true); };
   const confirmDeleteMenuKategori = useCallback(async () => {
     if (!categoryToDelete) return;
     setLoadingMenu(true); setError(null);
     try {
-      // `main.py`'deki `/admin/menu/kategoriler/{kategori_id}` endpoint'i kategori ID'si bekliyor.
       await apiClient.delete(`/admin/menu/kategoriler/${categoryToDelete.id}`);
       alert(`'${categoryToDelete.isim}' kategorisi ve bağlı tüm ürünler silindi.`);
       setShowDeleteCategoryModal(false); setCategoryToDelete(null);
       await fetchMenuKategorileri();
       await verileriGetir();
+      await fetchMenuItemsForRecipeSelection();
+      await fetchMenuUrunReceteleri();
     } catch (err) { handleApiError(err, "Menü kategorisi silinemedi", "Menü Kategori Silme"); }
     finally { setLoadingMenu(false); }
-  }, [categoryToDelete, fetchMenuKategorileri, verileriGetir, handleApiError]);
+  }, [categoryToDelete, fetchMenuKategorileri, verileriGetir, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
+
 
   const handleYeniKullaniciChange = (e) => { const { name, value, type, checked } = e.target; setYeniKullanici(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value })); };
   const yeniKullaniciEkle = useCallback(async (e) => {
@@ -356,7 +422,6 @@ function AdminPaneli() {
     if (yeniKullanici.sifre.length < 6) { alert("Şifre en az 6 karakter olmalıdır."); return; }
     setLoadingUsers(true); setError(null);
     try {
-      // `main.py`'deki `/admin/kullanicilar` endpoint'i POST ile KullaniciCreate modelini bekliyor.
       await apiClient.post("/admin/kullanicilar", { ...yeniKullanici, kullanici_adi: yeniKullanici.kullanici_adi.trim() });
       alert("Yeni kullanıcı eklendi.");
       setYeniKullanici(initialYeniKullaniciState); setShowAddUserForm(false);
@@ -376,7 +441,6 @@ function AdminPaneli() {
     const dataToUpdate = { kullanici_adi: editingUser.kullanici_adi.trim(), rol: editingUser.rol, aktif_mi: editingUser.aktif_mi };
     if (editingUser.sifre && editingUser.sifre.trim() !== "") dataToUpdate.sifre = editingUser.sifre.trim();
     try {
-      // `main.py`'deki `/admin/kullanicilar/{user_id}` endpoint'i PUT ile KullaniciUpdate modelini bekliyor.
       await apiClient.put(`/admin/kullanicilar/${editingUser.id}`, dataToUpdate);
       alert("Kullanıcı güncellendi.");
       setShowEditUserModal(false); setEditingUser(null);
@@ -390,7 +454,6 @@ function AdminPaneli() {
     if (!userToDelete) return;
     setLoadingUsers(true); setError(null);
     try {
-      // `main.py`'deki `/admin/kullanicilar/{user_id}` endpoint'i DELETE ile kullanıcıyı siliyor.
       await apiClient.delete(`/admin/kullanicilar/${userToDelete.id}`);
       alert(`'${userToDelete.kullanici_adi}' kullanıcısı silindi.`);
       setShowDeleteUserModal(false); setUserToDelete(null);
@@ -399,6 +462,7 @@ function AdminPaneli() {
     finally { setLoadingUsers(false); }
   }, [userToDelete, kullanicilariGetir, handleApiError, currentUser]);
 
+
   const openStokKategoriModal = useCallback((kategori = null) => { setEditingStokKategori(kategori ? { ...kategori } : initialEditingStokKategori); setShowStokKategoriModal(true); }, [initialEditingStokKategori]);
   const handleStokKategoriFormSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -406,15 +470,13 @@ function AdminPaneli() {
     setLoadingStok(true); setError(null);
     try {
       if (editingStokKategori.id) {
-        // `main.py`'deki `/admin/stok/kategoriler/{stok_kategori_id}` endpoint'i PUT ile StokKategoriCreate modelini bekliyor.
         await apiClient.put(`/admin/stok/kategoriler/${editingStokKategori.id}`, { ad: editingStokKategori.ad.trim() });
         alert("Stok kategorisi güncellendi.");
       } else {
-        // `main.py`'deki `/admin/stok/kategoriler` endpoint'i POST ile StokKategoriCreate modelini bekliyor.
         await apiClient.post("/admin/stok/kategoriler", { ad: editingStokKategori.ad.trim() });
         alert("Stok kategorisi eklendi.");
       }
-      setShowStokKategoriModal(false); setEditingStokKategori(initialEditingStokKategori); // Formu sıfırla
+      setShowStokKategoriModal(false); setEditingStokKategori(initialEditingStokKategori);
       await fetchStokKategorileri();
     } catch (err) { handleApiError(err, "Stok kategori işlemi başarısız", "Stok Kategori Kayıt"); }
     finally { setLoadingStok(false); }
@@ -425,15 +487,15 @@ function AdminPaneli() {
     if (!stokKategoriToDelete) return;
     setLoadingStok(true); setError(null);
     try {
-      // `main.py`'deki `/admin/stok/kategoriler/{stok_kategori_id}` endpoint'i DELETE ile stok kategorisini siliyor.
       await apiClient.delete(`/admin/stok/kategoriler/${stokKategoriToDelete.id}`);
       alert(`'${stokKategoriToDelete.ad}' stok kategorisi silindi.`);
       setStokKategoriToDelete(null);
       await fetchStokKategorileri();
-      await fetchStokKalemleri(); // Kategori silindiğinde kalemler de etkilenebilir veya filtrelenmesi gerekebilir.
+      await fetchStokKalemleri();
+      await fetchStockItemsForRecipeSelection();
     } catch (err) { handleApiError(err, "Stok kategorisi silinemedi", "Stok Kategori Silme"); }
     finally { setLoadingStok(false); }
-  }, [stokKategoriToDelete, fetchStokKategorileri, fetchStokKalemleri, handleApiError]);
+  }, [stokKategoriToDelete, fetchStokKategorileri, fetchStokKalemleri, fetchStockItemsForRecipeSelection, handleApiError]);
 
   const openStokKalemiModal = useCallback((kalem = null) => {
     setEditingStokKalemi(kalem ? {...kalem, stok_kategori_id: kalem.stok_kategori_id || "", son_alis_fiyati: kalem.son_alis_fiyati ?? ""} : initialEditingStokKalemi);
@@ -450,63 +512,146 @@ function AdminPaneli() {
     const { id, ad, stok_kategori_id, birim, mevcut_miktar, min_stok_seviyesi, son_alis_fiyati } = editingStokKalemi;
     if (!ad?.trim() || !stok_kategori_id || stok_kategori_id === "" || !birim?.trim()) { alert("Kalem adı, stok kategorisi ve birim zorunludur."); return; }
     setLoadingStok(true); setError(null);
-
-    const payloadBase = {
-        ad: ad.trim(),
-        stok_kategori_id: parseInt(stok_kategori_id, 10),
-        birim: birim.trim(),
-        min_stok_seviyesi: parseFloat(min_stok_seviyesi) || 0,
-    };
-
+    const payloadBase = { ad: ad.trim(), stok_kategori_id: parseInt(stok_kategori_id, 10), birim: birim.trim(), min_stok_seviyesi: parseFloat(min_stok_seviyesi) || 0 };
     let payload;
-    if (id) { // Güncelleme
-        // `main.py` StokKalemiUpdate sadece belirtilen alanları alır.
-        // Sadece temel alanları gönderiyoruz, mevcut_miktar ve son_alis_fiyati için backend ayrı bir işlem bekleyebilir (fatura girişi vs.)
-        payload = {
-            ad: ad.trim(),
-            stok_kategori_id: parseInt(stok_kategori_id, 10),
-            birim: birim.trim(),
-            min_stok_seviyesi: parseFloat(min_stok_seviyesi) || 0,
-        };
-    } else { // Ekleme - StokKalemiCreate modeline göre
-        payload = {
-            ...payloadBase,
-            mevcut_miktar: parseFloat(mevcut_miktar) || 0, // StokKalemiCreate'de var
-            son_alis_fiyati: son_alis_fiyati && String(son_alis_fiyati).trim() !== "" ? parseFloat(son_alis_fiyati) : null, // StokKalemiCreate'de var
-        };
-    }
+    if (id) { payload = { ...payloadBase }; }
+    else { payload = { ...payloadBase, mevcut_miktar: parseFloat(mevcut_miktar) || 0, son_alis_fiyati: son_alis_fiyati && String(son_alis_fiyati).trim() !== "" ? parseFloat(son_alis_fiyati) : null }; }
 
     try {
-      if (id) {
-        // `main.py`'deki `/admin/stok/kalemler/{stok_kalemi_id}` PUT ile StokKalemiUpdate modelini bekliyor.
-        await apiClient.put(`/admin/stok/kalemler/${id}`, payload);
-        alert("Stok kalemi güncellendi.");
-      } else {
-        // `main.py`'deki `/admin/stok/kalemler` POST ile StokKalemiCreate modelini bekliyor.
-        await apiClient.post("/admin/stok/kalemler", payload);
-        alert("Stok kalemi eklendi.");
-      }
-      setShowStokKalemiModal(false); setEditingStokKalemi(initialEditingStokKalemi); // Formu sıfırla
+      if (id) { await apiClient.put(`/admin/stok/kalemler/${id}`, payload); alert("Stok kalemi güncellendi."); }
+      else { await apiClient.post("/admin/stok/kalemler", payload); alert("Stok kalemi eklendi."); }
+      setShowStokKalemiModal(false); setEditingStokKalemi(initialEditingStokKalemi);
       await fetchStokKalemleri(selectedStokKategoriFilter || null);
+      await fetchStockItemsForRecipeSelection();
     } catch (err) { handleApiError(err, "Stok kalemi işlemi başarısız", "Stok Kalemi Kayıt"); }
     finally { setLoadingStok(false); }
-  }, [editingStokKalemi, fetchStokKalemleri, selectedStokKategoriFilter, handleApiError, initialEditingStokKalemi]);
+  }, [editingStokKalemi, fetchStokKalemleri, selectedStokKategoriFilter, fetchStockItemsForRecipeSelection, handleApiError, initialEditingStokKalemi]);
 
   const openStokKalemiSilModal = (kalem) => { setStokKalemiToDelete(kalem); };
   const confirmDeleteStokKalemi = useCallback(async () => {
     if (!stokKalemiToDelete) return;
     setLoadingStok(true); setError(null);
     try {
-      // `main.py`'deki `/admin/stok/kalemler/{stok_kalemi_id}` DELETE ile stok kalemini siliyor.
       await apiClient.delete(`/admin/stok/kalemler/${stokKalemiToDelete.id}`);
       alert(`'${stokKalemiToDelete.ad}' stok kalemi silindi.`);
       setStokKalemiToDelete(null);
       await fetchStokKalemleri(selectedStokKategoriFilter || null);
+      await fetchStockItemsForRecipeSelection();
     } catch (err) { handleApiError(err, "Stok kalemi silinemedi", "Stok Kalemi Silme"); }
     finally { setLoadingStok(false); }
-  }, [stokKalemiToDelete, fetchStokKalemleri, selectedStokKategoriFilter, handleApiError]);
+  }, [stokKalemiToDelete, fetchStokKalemleri, selectedStokKategoriFilter, fetchStockItemsForRecipeSelection, handleApiError]);
 
   useEffect(() => { if(isAuthenticated && userRole === 'admin' && !loadingAuth) fetchStokKalemleri(selectedStokKategoriFilter || null); }, [selectedStokKategoriFilter, isAuthenticated, userRole, loadingAuth, fetchStokKalemleri]);
+
+  // YENİ EKLENEN: Reçete Yönetimi Fonksiyonları
+  const openRecipeModal = useCallback((recipe = null) => {
+    fetchMenuItemsForRecipeSelection();
+    fetchStockItemsForRecipeSelection();
+
+    if (recipe) {
+      setEditingRecipe({
+        ...recipe,
+        menu_urun_id: recipe.menu_urun_id || "",
+        bilesenler: recipe.bilesenler?.map(b => ({
+          id: b.id, // Eğer backend'den bileşen ID'si geliyorsa ve düzenleme için önemliyse
+          stok_kalemi_id: b.stok_kalemi_id || "",
+          miktar: b.miktar || "",
+          birim: b.birim || "",
+        })) || []
+      });
+    } else {
+      setEditingRecipe(initialEditingRecipeState);
+    }
+    setShowRecipeModal(true);
+  }, [initialEditingRecipeState, fetchMenuItemsForRecipeSelection, fetchStockItemsForRecipeSelection]);
+
+  const handleRecipeFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditingRecipe(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleRecipeBilesenChange = (index, field, value) => {
+    setEditingRecipe(prev => ({
+      ...prev,
+      bilesenler: prev.bilesenler.map((b, i) => i === index ? { ...b, [field]: value } : b)
+    }));
+  };
+
+  const addRecipeBilesen = () => {
+    setEditingRecipe(prev => ({
+      ...prev,
+      bilesenler: [...prev.bilesenler, { stok_kalemi_id: "", miktar: "", birim: "" }]
+    }));
+  };
+
+  const removeRecipeBilesen = (index) => {
+    setEditingRecipe(prev => ({
+      ...prev,
+      bilesenler: prev.bilesenler.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSaveRecipe = useCallback(async (e) => {
+    e.preventDefault();
+    const { id, menu_urun_id, aciklama, porsiyon_birimi, porsiyon_miktari, bilesenler } = editingRecipe;
+
+    if (!menu_urun_id) { alert("Lütfen reçetenin ait olduğu menü ürününü seçin."); return; }
+    if (!porsiyon_birimi.trim()) { alert("Porsiyon birimi boş bırakılamaz."); return; }
+    if (isNaN(parseFloat(porsiyon_miktari)) || parseFloat(porsiyon_miktari) <= 0) { alert("Lütfen geçerli bir pozitif porsiyon miktarı girin."); return; }
+    if (bilesenler.length === 0) { alert("Reçete en az bir bileşen içermelidir."); return; }
+
+    for (const bilesen of bilesenler) {
+      if (!bilesen.stok_kalemi_id) { alert("Tüm bileşenler için stok kalemi seçilmelidir."); return; }
+      const stokKalemiAdi = stockItemsForRecipe.find(s=>s.id === parseInt(bilesen.stok_kalemi_id))?.ad || `ID: ${bilesen.stok_kalemi_id}`;
+      if (isNaN(parseFloat(bilesen.miktar)) || parseFloat(bilesen.miktar) <= 0) { alert(`'${stokKalemiAdi}' bileşeni için geçerli bir miktar girin.`); return; }
+      if (!bilesen.birim.trim()) { alert(`'${stokKalemiAdi}' bileşeni için birim belirtin.`); return; }
+    }
+
+    setLoadingRecipes(true); setError(null);
+
+    const payload = {
+      menu_urun_id: parseInt(menu_urun_id, 10),
+      aciklama: aciklama?.trim() || null,
+      porsiyon_birimi: porsiyon_birimi.trim(),
+      porsiyon_miktari: parseFloat(porsiyon_miktari),
+      bilesenler: bilesenler.map(b => ({
+        stok_kalemi_id: parseInt(b.stok_kalemi_id, 10),
+        miktar: parseFloat(b.miktar),
+        birim: b.birim.trim(),
+      })),
+    };
+
+    try {
+      if (id) {
+        await apiClient.put(`/admin/receteler/${id}`, payload);
+        alert("Reçete başarıyla güncellendi.");
+      } else {
+        await apiClient.post("/admin/receteler", payload);
+        alert("Reçete başarıyla eklendi.");
+      }
+      setShowRecipeModal(false);
+      setEditingRecipe(initialEditingRecipeState);
+      await fetchMenuUrunReceteleri();
+    } catch (err) {
+      handleApiError(err, id ? "Reçete güncellenemedi" : "Reçete eklenemedi", "Reçete Kayıt");
+    } finally {
+      setLoadingRecipes(false);
+    }
+  }, [editingRecipe, stockItemsForRecipe, fetchMenuUrunReceteleri, handleApiError, initialEditingRecipeState]);
+
+  const openDeleteRecipeModal = (recete) => { setRecipeToDelete(recete); };
+  const confirmDeleteRecipe = useCallback(async () => {
+    if (!recipeToDelete) return;
+    setLoadingRecipes(true); setError(null);
+    try {
+      await apiClient.delete(`/admin/receteler/${recipeToDelete.id}`);
+      alert(`'${recipeToDelete.menu_urun_ad || `ID: ${recipeToDelete.menu_urun_id}`}' ürününün reçetesi silindi.`);
+      setRecipeToDelete(null);
+      await fetchMenuUrunReceteleri();
+    } catch (err) { handleApiError(err, "Reçete silinemedi", "Reçete Silme"); }
+    finally { setLoadingRecipes(false); }
+  }, [recipeToDelete, fetchMenuUrunReceteleri, handleApiError]);
+  // YENİ EKLENEN KISIM SONU
 
 
   const filtrelenmisSiparisler = orders.filter((o) => {
@@ -548,7 +693,7 @@ function AdminPaneli() {
     );
   }
 
-  const anyLoading = loadingDashboardStats || loadingUsers || loadingMenu || loadingStok;
+  const anyLoading = loadingDashboardStats || loadingUsers || loadingMenu || loadingStok || loadingRecipes; // YENİ: loadingRecipes eklendi
 
   return (
     <div className="p-4 md:p-6 bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 min-h-screen text-slate-800 font-['Nunito',_sans-serif] relative">
@@ -586,7 +731,6 @@ function AdminPaneli() {
         </button>
       </header>
 
-      {/* İstatistik Kartları */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <div className="bg-white p-4 sm:p-5 rounded-xl shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
           <h3 className="text-xs sm:text-sm font-semibold mb-1 flex items-center gap-2 text-slate-500">
@@ -632,7 +776,6 @@ function AdminPaneli() {
         </div>
       </section>
 
-      {/* Aktif Masalar Tablosu */}
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <h3 className="text-lg sm:text-xl font-semibold mb-4 text-slate-700 flex items-center gap-2 sm:gap-3">
             <ListChecks className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-600" /> Aktif Masaların Ödenmemiş Hesapları
@@ -666,7 +809,6 @@ function AdminPaneli() {
       </section>
 
 
-      {/* Grafikler */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 md:mb-8">
         <div className="bg-white p-5 sm:p-6 rounded-xl shadow-lg">
           <h3 className="text-base sm:text-lg font-semibold mb-4 text-slate-700">Yıllık Satış Adetleri (Aylık Kırılım)</h3>
@@ -704,13 +846,11 @@ function AdminPaneli() {
         </div>
       </section>
 
-      {/* Menü Yönetimi */}
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <h3 className="text-xl font-semibold mb-6 text-slate-700 flex items-center gap-3">
           <MenuSquare className="w-6 h-6 text-teal-600" /> Menü Yönetimi
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          {/* Menü Ürün Ekle/Sil Bölümü */}
           <div className="md:col-span-4 space-y-6 p-4 bg-teal-50/50 rounded-lg border border-teal-200/70">
             <div>
                 <h4 className="font-medium mb-2 text-teal-700 flex items-center gap-1.5"><FilePlus size={18}/>Yeni Ürün Ekle</h4>
@@ -738,8 +878,6 @@ function AdminPaneli() {
               </form>
             </div>
           </div>
-
-          {/* Mevcut Menü Listesi */}
           <div className="md:col-span-5">
             <h4 className="font-medium mb-3 text-gray-600">Mevcut Menü</h4>
             {(loadingDashboardStats || loadingMenu) && (!menu || menu.length === 0) && (
@@ -782,8 +920,6 @@ function AdminPaneli() {
               </div>
             )}
           </div>
-
-          {/* Menü Kategori Yönetimi */}
           <div className="md:col-span-3 space-y-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <h4 className="text-sm font-medium text-slate-600 flex items-center gap-1.5">
               <ClipboardList size={16} className="text-cyan-600"/>Menü Kategorileri
@@ -812,13 +948,11 @@ function AdminPaneli() {
         </div>
       </section>
 
-      {/* Stok Yönetimi */}
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <h3 className="text-xl font-semibold mb-6 text-slate-700 flex items-center gap-3">
           <ClipboardEdit size={22} className="text-lime-600" /> Stok Yönetimi
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Stok Kategorileri Sütunu */}
           <div className="md:col-span-1 p-4 border border-lime-200/70 rounded-lg bg-lime-50/40">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-lime-200">
               <h4 className="text-base font-medium text-lime-700 flex items-center gap-2"><Archive size={18}/>Stok Kategorileri</h4>
@@ -844,8 +978,6 @@ function AdminPaneli() {
               ))}
             </ul>
           </div>
-
-          {/* Stok Kalemleri Sütunu */}
           <div className="md:col-span-2 p-4 border border-lime-200/70 rounded-lg">
             <div className="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-lime-200 gap-2">
               <h4 className="text-base font-medium text-lime-700 flex items-center gap-2"><Boxes size={18}/>Stok Kalemleri</h4>
@@ -912,93 +1044,64 @@ function AdminPaneli() {
         </div>
       </section>
 
-      {/* Kullanıcı Yönetimi */}
+      {/* YENİ EKLENEN: Reçete Yönetimi Bölümü */}
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-          <h3 className="text-lg sm:text-xl font-semibold text-slate-700 flex items-center gap-2 sm:gap-3">
-            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" /> Kullanıcı Yönetimi
+          <h3 className="text-xl font-semibold text-slate-700 flex items-center gap-3">
+            <BookOpenText size={22} className="text-amber-600" /> Reçete Yönetimi
           </h3>
           <button
-            onClick={() => { setShowAddUserForm(prev => !prev); if(!showAddUserForm) { setYeniKullanici(initialYeniKullaniciState); setEditingUser(null); } }}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition shadow-sm active:scale-95 flex items-center gap-1.5 sm:gap-2 ${
-                showAddUserForm ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"
-            }`}
+            onClick={() => openRecipeModal()}
+            disabled={loadingRecipes || menuItemsForRecipe.length === 0 || stockItemsForRecipe.length === 0}
+            title={menuItemsForRecipe.length === 0 || stockItemsForRecipe.length === 0 ? "Önce menü ve stok kalemleri yüklenmeli/eklenmeli" : "Yeni Reçete Ekle"}
+            className="bg-amber-500 hover:bg-amber-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition shadow-sm active:scale-95 flex items-center gap-1.5 sm:gap-2 disabled:bg-slate-400"
           >
-            {showAddUserForm ? <><X size={16}/> Formu Kapat</> : <><UserPlus size={16}/> Yeni Kullanıcı</>}
+            {loadingRecipes && <RotateCw size={16} className="animate-spin mr-1"/>}
+            <ClipboardPlus size={16} /> Yeni Reçete Ekle
           </button>
         </div>
-        {showAddUserForm && (
-            <form onSubmit={yeniKullaniciEkle} className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50/70 space-y-3 text-sm">
-                 <h4 className="text-base font-medium text-slate-600 mb-2">Yeni Personel Kaydı</h4>
-                <div>
-                    <label htmlFor="yeni_kullanici_adi_form" className="block text-xs font-medium text-slate-700">Kullanıcı Adı</label>
-                    <input type="text" name="kullanici_adi" id="yeni_kullanici_adi_form" value={yeniKullanici.kullanici_adi} onChange={handleYeniKullaniciChange}
-                           className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="3"/>
-                </div>
-                <div>
-                    <label htmlFor="yeni_sifre_form" className="block text-xs font-medium text-slate-700">Şifre</label>
-                    <input type="password" name="sifre" id="yeni_sifre_form" value={yeniKullanici.sifre} onChange={handleYeniKullaniciChange}
-                           className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="6"/>
-                </div>
-                <div>
-                    <label htmlFor="yeni_rol_form" className="block text-xs font-medium text-slate-700">Rol</label>
-                    <select name="rol" id="yeni_rol_form" value={yeniKullanici.rol} onChange={handleYeniKullaniciChange}
-                            className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
-                        {KULLANICI_ROLLER.map(rol => <option key={rol} value={rol}>{rol.charAt(0).toUpperCase() + rol.slice(1).replace("_personeli", " Personeli")}</option>)}
-                    </select>
-                </div>
-                <div className="flex items-center pt-1">
-                    <input id="yeni_aktif_mi_form" name="aktif_mi" type="checkbox" checked={yeniKullanici.aktif_mi} onChange={handleYeniKullaniciChange}
-                           className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"/>
-                    <label htmlFor="yeni_aktif_mi_form" className="ml-2 block text-xs text-slate-700">Aktif Kullanıcı</label>
-                </div>
-                <button type="submit" disabled={loadingUsers}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md shadow-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                    {loadingUsers ? <RotateCw size={16} className="animate-spin" /> : <UserPlus size={16} /> }
-                    Kullanıcıyı Ekle
-                </button>
-            </form>
-        )}
 
-        <h4 className="text-base font-medium text-slate-600 mb-3 mt-4">Mevcut Kullanıcılar</h4>
-        {loadingUsers && kullanicilar.length === 0 && <p className="text-sm text-slate-500 py-2">Kullanıcılar yükleniyor...</p>}
-        {!loadingUsers && kullanicilar.length === 0 && <p className="text-sm text-slate-500 py-2">Kayıtlı kullanıcı yok.</p>}
-        {kullanicilar.length > 0 && (
-            <div className="overflow-x-auto text-sm">
-                <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-md">
-                    <thead className="bg-indigo-50">
-                        <tr>
-                            <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">ID</th>
-                            <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Kullanıcı Adı</th>
-                            <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Rol</th>
-                            <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Durum</th>
-                            <th className="px-3 py-2.5 text-center text-xs font-medium text-indigo-700 uppercase tracking-wider">İşlemler</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100">
-                        {kullanicilar.sort((a,b) => a.kullanici_adi.localeCompare(b.kullanici_adi)).map(k => (
-                            <tr key={k.id} className="hover:bg-indigo-50/40 transition-colors">
-                                <td className="px-3 py-2 whitespace-nowrap text-slate-600">{k.id}</td>
-                                <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-800">{k.kullanici_adi}</td>
-                                <td className="px-3 py-2 whitespace-nowrap text-slate-600">{k.rol.charAt(0).toUpperCase() + k.rol.slice(1).replace("_personeli", " P.")}</td>
-                                <td className="px-3 py-2 whitespace-nowrap">
-                                    <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${ k.aktif_mi ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {k.aktif_mi ? 'Aktif' : 'Pasif'}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-2 whitespace-nowrap text-center">
-                                    <button onClick={() => openEditUserModal(k)} className="text-blue-600 p-0.5 rounded hover:bg-blue-100 mr-1.5" title="Düzenle" disabled={loadingUsers}><Edit3 size={15}/></button>
-                                    <button onClick={() => openDeleteUserModal(k)} disabled={currentUser?.id === k.id || loadingUsers} className={`text-red-600 p-0.5 rounded hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed ${currentUser?.id === k.id ? 'opacity-40 cursor-not-allowed' : ''}`} title={currentUser?.id === k.id ? "Kendinizi silemezsiniz" : "Sil"}><Trash2 size={15}/></button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+        {loadingRecipes && menuUrunReceteleri.length === 0 && <p className="text-sm text-slate-500 py-2">Reçeteler yükleniyor...</p>}
+        {!loadingRecipes && menuUrunReceteleri.length === 0 && <p className="text-sm text-slate-500 py-2">Henüz hiç ürün reçetesi eklenmemiş.</p>}
+
+        {menuUrunReceteleri.length > 0 && (
+          <div className="overflow-x-auto max-h-[500px] text-xs sm:text-sm">
+            <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-md">
+              <thead className="bg-amber-50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-medium text-amber-700 uppercase tracking-wider">Menü Ürünü</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-amber-700 uppercase tracking-wider">Porsiyon</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-amber-700 uppercase tracking-wider">Bileşen Sayısı</th>
+                  <th className="px-3 py-2.5 text-left font-medium text-amber-700 uppercase tracking-wider">Son Güncelleme</th>
+                  <th className="px-3 py-2.5 text-center font-medium text-amber-700 uppercase tracking-wider">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-100">
+                {menuUrunReceteleri.sort((a,b) => (a.menu_urun_ad || "").localeCompare(b.menu_urun_ad || "")).map(recete => (
+                  <tr key={recete.id} className="hover:bg-amber-50/40 transition-colors">
+                    <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-800" title={recete.menu_urun_ad || `ID: ${recete.menu_urun_id}`}>{recete.menu_urun_ad || `Menü Ürün ID: ${recete.menu_urun_id}`}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">{`${recete.porsiyon_miktari} ${recete.porsiyon_birimi}`}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-600">{recete.bilesenler?.length || 0}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-500">{recete.guncellenme_tarihi ? new Date(recete.guncellenme_tarihi).toLocaleDateString("tr-TR") : "-"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-center">
+                      <button onClick={() => openRecipeModal(recete)} className="text-blue-600 p-0.5 rounded hover:bg-blue-100 mr-1.5" title="Düzenle" disabled={loadingRecipes}><Edit3 size={15}/></button>
+                      <button onClick={() => openDeleteRecipeModal(recete)} disabled={loadingRecipes} className="text-red-600 p-0.5 rounded hover:bg-red-100 disabled:opacity-50" title="Sil"><Trash2 size={15}/></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
+      {/* YENİ EKLENEN KISIM SONU */}
 
-      {/* Sipariş Geçmişi */}
+      <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
+        <div className="flex flex-wrap justify-between items-center mb-4 gap-2"> <h3 className="text-lg sm:text-xl font-semibold text-slate-700 flex items-center gap-2 sm:gap-3"> <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" /> Kullanıcı Yönetimi </h3> <button onClick={() => { setShowAddUserForm(prev => !prev); if(!showAddUserForm) { setYeniKullanici(initialYeniKullaniciState); setEditingUser(null); } }} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition shadow-sm active:scale-95 flex items-center gap-1.5 sm:gap-2 ${ showAddUserForm ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white" }`}> {showAddUserForm ? <><X size={16}/> Formu Kapat</> : <><UserPlus size={16}/> Yeni Kullanıcı</>} </button> </div>
+        {showAddUserForm && ( <form onSubmit={yeniKullaniciEkle} className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50/70 space-y-3 text-sm"> <h4 className="text-base font-medium text-slate-600 mb-2">Yeni Personel Kaydı</h4> <div> <label htmlFor="yeni_kullanici_adi_form" className="block text-xs font-medium text-slate-700">Kullanıcı Adı</label> <input type="text" name="kullanici_adi" id="yeni_kullanici_adi_form" value={yeniKullanici.kullanici_adi} onChange={handleYeniKullaniciChange} className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="3"/> </div> <div> <label htmlFor="yeni_sifre_form" className="block text-xs font-medium text-slate-700">Şifre</label> <input type="password" name="sifre" id="yeni_sifre_form" value={yeniKullanici.sifre} onChange={handleYeniKullaniciChange} className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="6"/> </div> <div> <label htmlFor="yeni_rol_form" className="block text-xs font-medium text-slate-700">Rol</label> <select name="rol" id="yeni_rol_form" value={yeniKullanici.rol} onChange={handleYeniKullaniciChange} className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"> {KULLANICI_ROLLER.map(rol => <option key={rol} value={rol}>{rol.charAt(0).toUpperCase() + rol.slice(1).replace("_personeli", " Personeli")}</option>)} </select> </div> <div className="flex items-center pt-1"> <input id="yeni_aktif_mi_form" name="aktif_mi" type="checkbox" checked={yeniKullanici.aktif_mi} onChange={handleYeniKullaniciChange} className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"/> <label htmlFor="yeni_aktif_mi_form" className="ml-2 block text-xs text-slate-700">Aktif Kullanıcı</label> </div> <button type="submit" disabled={loadingUsers} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md shadow-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"> {loadingUsers ? <RotateCw size={16} className="animate-spin" /> : <UserPlus size={16} /> } Kullanıcıyı Ekle </button> </form> )}
+        <h4 className="text-base font-medium text-slate-600 mb-3 mt-4">Mevcut Kullanıcılar</h4> {loadingUsers && kullanicilar.length === 0 && <p className="text-sm text-slate-500 py-2">Kullanıcılar yükleniyor...</p>} {!loadingUsers && kullanicilar.length === 0 && <p className="text-sm text-slate-500 py-2">Kayıtlı kullanıcı yok.</p>} {kullanicilar.length > 0 && ( <div className="overflow-x-auto text-sm"> <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-md"> <thead className="bg-indigo-50"> <tr> <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">ID</th> <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Kullanıcı Adı</th> <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Rol</th> <th className="px-3 py-2.5 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Durum</th> <th className="px-3 py-2.5 text-center text-xs font-medium text-indigo-700 uppercase tracking-wider">İşlemler</th> </tr> </thead> <tbody className="bg-white divide-y divide-slate-100"> {kullanicilar.sort((a,b) => a.kullanici_adi.localeCompare(b.kullanici_adi)).map(k => ( <tr key={k.id} className="hover:bg-indigo-50/40 transition-colors"> <td className="px-3 py-2 whitespace-nowrap text-slate-600">{k.id}</td> <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-800">{k.kullanici_adi}</td> <td className="px-3 py-2 whitespace-nowrap text-slate-600">{k.rol.charAt(0).toUpperCase() + k.rol.slice(1).replace("_personeli", " P.")}</td> <td className="px-3 py-2 whitespace-nowrap"> <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${ k.aktif_mi ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}> {k.aktif_mi ? 'Aktif' : 'Pasif'} </span> </td> <td className="px-3 py-2 whitespace-nowrap text-center"> <button onClick={() => openEditUserModal(k)} className="text-blue-600 p-0.5 rounded hover:bg-blue-100 mr-1.5" title="Düzenle" disabled={loadingUsers}><Edit3 size={15}/></button> <button onClick={() => openDeleteUserModal(k)} disabled={currentUser?.id === k.id || loadingUsers} className={`text-red-600 p-0.5 rounded hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed ${currentUser?.id === k.id ? 'opacity-40 cursor-not-allowed' : ''}`} title={currentUser?.id === k.id ? "Kendinizi silemezsiniz" : "Sil"}><Trash2 size={15}/></button> </td> </tr> ))} </tbody> </table> </div> )}
+      </section>
+
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg">
         <h3 className="text-lg sm:text-xl font-semibold mb-4 text-slate-700 flex items-center gap-2 sm:gap-3">
             <CreditCardIcon className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" /> Tüm Siparişler ({filtrelenmisSiparisler.length})
@@ -1073,7 +1176,6 @@ function AdminPaneli() {
         )}
       </section>
 
-      {/* Sistem Bilgisi */}
       <div className="bg-white p-6 rounded-lg shadow-lg mt-8 text-center">
         <p className="text-xs text-gray-500">
           Neso Sipariş Asistanı Admin Paneli v1.4.0 &copy; {new Date().getFullYear()} Fıstık Kafe
@@ -1081,12 +1183,12 @@ function AdminPaneli() {
         <button
             onClick={async () => {
                 if (!window.confirm("Tüm menü, fiyat ve stok önbelleklerini temizleyip sistem mesajını güncellemek istediğinize emin misiniz? Bu işlem biraz zaman alabilir.")) return;
-                setLoadingDashboardStats(true); // Genel bir yükleme state'i kullanılabilir.
+                setLoadingDashboardStats(true);
                 setError(null);
                 try {
                     await apiClient.get("/admin/clear-menu-caches");
                     alert("Önbellekler temizlendi ve sistem mesajı güncellendi. Değişikliklerin yansıması için verileri yenileyin.");
-                    refreshAllAdminData(); // Verileri yeniden çek
+                    refreshAllAdminData();
                 } catch (err) {
                     handleApiError(err, "Önbellek temizlenemedi.", "Cache Temizleme");
                 } finally {
@@ -1101,8 +1203,6 @@ function AdminPaneli() {
         </button>
       </div>
 
-
-      {/* Modallar */}
       <Modal isOpen={showAddMenuItemModal} onClose={() => {setShowAddMenuItemModal(false); setYeniUrun(initialYeniUrunState);}} title="Yeni Menü Ürünü Ekle">
           <form onSubmit={urunEkle} className="space-y-3 text-sm">
               <div>
@@ -1115,7 +1215,7 @@ function AdminPaneli() {
                   <input type="number" name="fiyat" id="yeniUrunFiyat_modal" value={yeniUrun.fiyat} onChange={(e) => setYeniUrun({...yeniUrun, fiyat: e.target.value})}
                          className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required step="0.01" min="0.01"/>
               </div>
-              <div> {/* Kategori adı girişi, yeni kategori otomatik oluşacak */}
+              <div>
                   <label htmlFor="yeniUrunKategori_modal" className="block text-xs font-medium text-slate-700">Kategori Adı</label>
                   <input type="text" name="kategori" id="yeniUrunKategori_modal" value={yeniUrun.kategori} onChange={(e) => setYeniUrun({...yeniUrun, kategori: e.target.value})}
                          className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required placeholder="Mevcut kategori veya yeni kategori adı"/>
@@ -1244,7 +1344,6 @@ function AdminPaneli() {
                     <label htmlFor="stok_kalem_birim_form_modal" className="block text-xs font-medium text-slate-700 mb-0.5">Birim</label>
                     <input type="text" name="birim" id="stok_kalem_birim_form_modal" placeholder="Birim (örn: kg, lt, adet)" value={editingStokKalemi.birim || ""} onChange={handleStokKalemiFormChange} className="w-full p-2 border border-slate-300 rounded-md" required />
                 </div>
-                {/* Sadece ekleme modunda mevcut miktar ve alış fiyatı gösteriliyor */}
                 {!editingStokKalemi.id && (
                     <>
                         <div>
@@ -1285,6 +1384,135 @@ function AdminPaneli() {
             </div>
         )}
       </Modal>
+      {/* YENİ EKLENEN: Reçete Modalı */}
+      <Modal isOpen={showRecipeModal} onClose={() => {setShowRecipeModal(false); setEditingRecipe(initialEditingRecipeState);}} title={editingRecipe?.id ? "Reçete Düzenle" : "Yeni Reçete Ekle"} size="max-w-3xl">
+        {editingRecipe && (
+          <form onSubmit={handleSaveRecipe} className="space-y-4 text-sm">
+            <div>
+              <label htmlFor="recipe_menu_urun_id" className="block text-xs font-medium text-slate-700 mb-0.5">Menü Ürünü (*)</label>
+              <select
+                name="menu_urun_id"
+                id="recipe_menu_urun_id"
+                value={editingRecipe.menu_urun_id}
+                onChange={handleRecipeFormChange}
+                className="w-full p-2 border border-slate-300 rounded-md bg-white"
+                required
+                disabled={!!editingRecipe.id || loadingRecipes || menuItemsForRecipe.length === 0}
+              >
+                <option value="">Menü Ürünü Seçin...</option>
+                {menuItemsForRecipe.sort((a,b) => a.ad.localeCompare(b.ad)).map(item => (
+                  <option key={item.id} value={item.id} title={item.ad + (item.kategori_ad ? ` (${item.kategori_ad})` : '')}>
+                    {item.ad} {item.kategori_ad ? `(${item.kategori_ad})` : ''}
+                  </option>
+                ))}
+              </select>
+              {editingRecipe.id && <p className="text-xs text-slate-500 mt-1">Reçete düzenlenirken ait olduğu menü ürünü değiştirilemez.</p>}
+              {menuItemsForRecipe.length === 0 && !loadingMenu && <p className="text-xs text-red-500 mt-1">Reçete eklenecek menü ürünü bulunamadı/yüklenemedi. Lütfen önce menüye ürün ekleyin.</p>}
+            </div>
+
+            <div>
+              <label htmlFor="recipe_aciklama" className="block text-xs font-medium text-slate-700 mb-0.5">Açıklama / Hazırlama Notları</label>
+              <textarea
+                name="aciklama"
+                id="recipe_aciklama"
+                value={editingRecipe.aciklama || ""}
+                onChange={handleRecipeFormChange}
+                placeholder="Örn: Malzemeler karıştırılır ve 180 derecede 20 dakika pişirilir."
+                rows="3"
+                className="w-full p-2 border border-slate-300 rounded-md"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="recipe_porsiyon_miktari" className="block text-xs font-medium text-slate-700 mb-0.5">Porsiyon Miktarı (*)</label>
+                <input type="number" name="porsiyon_miktari" id="recipe_porsiyon_miktari" placeholder="1" value={editingRecipe.porsiyon_miktari} onChange={handleRecipeFormChange} className="w-full p-2 border border-slate-300 rounded-md" required step="any" min="0.01"/>
+              </div>
+              <div>
+                <label htmlFor="recipe_porsiyon_birimi" className="block text-xs font-medium text-slate-700 mb-0.5">Porsiyon Birimi (*)</label>
+                <input type="text" name="porsiyon_birimi" id="recipe_porsiyon_birimi" placeholder="adet" value={editingRecipe.porsiyon_birimi} onChange={handleRecipeFormChange} className="w-full p-2 border border-slate-300 rounded-md" required />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <h5 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5">
+                <ListOrdered size={16} className="text-amber-700"/>Reçete Bileşenleri (*)
+              </h5>
+              {editingRecipe.bilesenler.length === 0 && (
+                <p className="text-xs text-slate-500 text-center py-2 border border-dashed border-slate-300 rounded-md">
+                  Henüz bileşen eklenmedi. Lütfen aşağıdaki butonu kullanarak ekleyin.
+                </p>
+              )}
+              {editingRecipe.bilesenler.map((bilesen, index) => (
+                <div key={index} className="grid grid-cols-12 gap-2 items-end mb-2 p-2 border border-slate-200 rounded-md bg-slate-50/50">
+                  <div className="col-span-5">
+                    <label htmlFor={`bilesen_stok_id_${index}`} className="block text-[11px] font-medium text-slate-600 mb-0.5">Stok Kalemi</label>
+                    <select
+                      id={`bilesen_stok_id_${index}`}
+                      value={bilesen.stok_kalemi_id}
+                      onChange={(e) => handleRecipeBilesenChange(index, "stok_kalemi_id", e.target.value)}
+                      className="w-full p-1.5 text-xs border border-slate-300 rounded-md bg-white"
+                      required
+                      disabled={stockItemsForRecipe.length === 0}
+                    >
+                      <option value="">Seçin...</option>
+                      {stockItemsForRecipe.sort((a,b) => a.ad.localeCompare(b.ad)).map(item => (
+                        <option key={item.id} value={item.id} title={`${item.ad} (Ana Birim: ${item.birim})`}>{item.ad}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-3">
+                    <label htmlFor={`bilesen_miktar_${index}`} className="block text-[11px] font-medium text-slate-600 mb-0.5">Miktar</label>
+                    <input type="number" id={`bilesen_miktar_${index}`} value={bilesen.miktar} onChange={(e) => handleRecipeBilesenChange(index, "miktar", e.target.value)} className="w-full p-1.5 text-xs border border-slate-300 rounded-md" required step="any" min="0.001"/>
+                  </div>
+                  <div className="col-span-3">
+                    <label htmlFor={`bilesen_birim_${index}`} className="block text-[11px] font-medium text-slate-600 mb-0.5">Birim</label>
+                    <input type="text" id={`bilesen_birim_${index}`} value={bilesen.birim} onChange={(e) => handleRecipeBilesenChange(index, "birim", e.target.value)} placeholder={stockItemsForRecipe.find(s => s.id === parseInt(bilesen.stok_kalemi_id))?.birim || "örn: gr, ml, adet"} className="w-full p-1.5 text-xs border border-slate-300 rounded-md" required />
+                  </div>
+                  <div className="col-span-1 flex items-center justify-center">
+                    <button type="button" onClick={() => removeRecipeBilesen(index)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-md" title="Bileşeni Sil">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addRecipeBilesen}
+                disabled={stockItemsForRecipe.length === 0}
+                className="mt-2 text-xs bg-sky-500 hover:bg-sky-600 text-white px-2.5 py-1.5 rounded-md font-medium flex items-center gap-1 disabled:bg-slate-400"
+                title={stockItemsForRecipe.length === 0 ? "Önce stok kalemi ekleyin veya yüklenmesini bekleyin" : ""}
+              >
+                <ListPlus size={14}/> Bileşen Ekle
+              </button>
+              {stockItemsForRecipe.length === 0 && !loadingStok && <p className="text-xs text-red-500 mt-1">Bileşen eklenecek stok kalemi bulunamadı/yüklenemedi. Lütfen önce stok kalemi ekleyin.</p>}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3">
+                <button type="button" onClick={() => {setShowRecipeModal(false); setEditingRecipe(initialEditingRecipeState);}} className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 rounded-md font-medium">İptal</button>
+                <button type="submit" disabled={loadingRecipes} className="px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-md font-medium disabled:bg-slate-400 flex items-center gap-1">
+                    {loadingRecipes && <RotateCw size={14} className="animate-spin"/>}
+                    {editingRecipe.id ? "Reçeteyi Güncelle" : "Reçeteyi Kaydet"}
+                </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+      <Modal isOpen={!!recipeToDelete} onClose={() => setRecipeToDelete(null)} title="Reçete Silme Onayı">
+          {recipeToDelete && (
+            <div className="text-sm">
+                <p className="text-slate-600 mb-3">'{recipeToDelete.menu_urun_ad || `ID: ${recipeToDelete.menu_urun_id}`}' ürününün reçetesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+                <div className="flex justify-end gap-2">
+                    <button onClick={() => setRecipeToDelete(null)} className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 rounded-md font-medium">Vazgeç</button>
+                    <button onClick={confirmDeleteRecipe} disabled={loadingRecipes} className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-md font-medium disabled:bg-slate-400 flex items-center gap-1">
+                        {loadingRecipes && <RotateCw size={14} className="animate-spin"/>}
+                        Evet, Sil
+                    </button>
+                </div>
+            </div>
+        )}
+      </Modal>
+
     </div>
   );
 }
