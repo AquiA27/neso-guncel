@@ -303,9 +303,8 @@ function AdminPaneli() {
     fetchStokKategorileri();
     fetchStokKalemleri(selectedStokKategoriFilter || null);
     fetchMenuUrunReceteleri(); // YENİ EKLENDİ
-    // Modal açıldığında veya ihtiyaç duyulduğunda çağrılacakları için burada genel refresh'e eklemeye gerek yok gibi duruyor.
-    // fetchMenuItemsForRecipeSelection(); 
-    // fetchStockItemsForRecipeSelection();
+    fetchMenuItemsForRecipeSelection(); 
+    fetchStockItemsForRecipeSelection();
   }, [verileriGetir, kullanicilariGetir, fetchMenuKategorileri, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, logInfo]); // YENİ: fetchMenuUrunReceteleri eklendi
 
   useEffect(() => {
