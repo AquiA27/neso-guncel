@@ -1,4 +1,5 @@
 // src/pages/AdminPaneli.jsx
+import { CalendarDays, BarChart3, PieChart as PieChartIcon, Table2, AlertTriangle as AlertTriangleIcon, Filter, FileText, DollarSignSquare, Hourglass, PercentCircle, PackageSearch } from "lucide-react"; // YENİ İKONLAR EKLENDİ
 import React, { useState, useEffect, useRef, useCallback, useContext } from "react";
 import {
   LineChart,
@@ -11,6 +12,9 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart, // PieChart komponenti eklendi
+  Pie,      // Pie komponenti eklendi
+  Cell      // Cell komponenti eklendi
 } from "recharts";
 import CountUp from "react-countup";
 import {
@@ -39,15 +43,17 @@ import {
   ClipboardList,
   ListPlus,
   FilePlus,
-  BookOpenText, // YENİ EKLENEN İKON (Reçete için)
-  ListOrdered, // YENİ EKLENEN İKON (Reçete için)
-  ClipboardPlus, // YENİ EKLENEN İKON (Reçete için)
+  BookOpenText,
+  ListOrdered,
+  ClipboardPlus,
 } from "lucide-react";
 import apiClient from '../services/apiClient';
 import { AuthContext } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const KULLANICI_ROLLER = ["admin", "kasiyer", "barista", "mutfak_personeli"];
+const PIE_CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28BFE', '#FF83A8', '#82ca9d', '#ffc658'];
+
 
 // Genel Modal Bileşeni
 const Modal = ({ isOpen, onClose, title, children, size = "max-w-lg" }) => {
@@ -88,6 +94,45 @@ const Modal = ({ isOpen, onClose, title, children, size = "max-w-lg" }) => {
   );
 };
 
+// YENİ EKLENEN: Raporlama için Genel Kart Bileşeni
+const ReportCard = ({ title, icon, children, isLoading, error, onFetch, fetchButtonText = "Raporu Getir", defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    const IconComponent = icon || FileText;
+
+    return (
+        <div className="bg-white p-4 sm:p-5 rounded-xl shadow-lg border border-slate-200">
+            <div className="flex justify-between items-center mb-3 cursor-pointer" onClick={() => setIsOpen(!isOpen)}>
+                <h4 className="text-md sm:text-lg font-semibold text-slate-700 flex items-center gap-2">
+                    <IconComponent size={20} className="text-blue-600" />
+                    {title}
+                </h4>
+                <ChevronDown size={20} className={`text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </div>
+            {isOpen && (
+                <div className="mt-2 border-t border-slate-200 pt-3">
+                    {onFetch && (
+                        <div className="mb-4">
+                            {children[0] /* Filtreler buraya gelecek */}
+                            <button
+                                onClick={onFetch}
+                                disabled={isLoading}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 shadow-sm transition-colors disabled:bg-slate-400"
+                            >
+                                {isLoading ? <RotateCw size={14} className="animate-spin" /> : <Filter size={14} />}
+                                {fetchButtonText}
+                            </button>
+                        </div>
+                    )}
+                    {isLoading && <p className="text-sm text-slate-500 py-2">Yükleniyor...</p>}
+                    {error && <p className="text-sm text-red-600 py-2">Hata: {error}</p>}
+                    {!isLoading && !error && (children[1] || children) /* Sonuçlar buraya gelecek */}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 function AdminPaneli() {
   const { isAuthenticated, currentUser, userRole, loadingAuth, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -96,7 +141,59 @@ function AdminPaneli() {
   const [error, setError] = useState(null);
   const wsRef = useRef(null);
 
-  // Dashboard State'leri
+  // YENİ EKLENEN: Detaylı Raporlar için genel state
+  const [showReports, setShowReports] = useState(true);
+
+
+  // Detaylı Satış Raporu State'leri (Mevcut)
+  const [detayliSatisRaporu, setDetayliSatisRaporu] = useState(null);
+  const [satisRaporuBaslangic, setSatisRaporuBaslangic] = useState(() => {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return firstDayOfMonth.toISOString().split('T')[0];
+  });
+  const [satisRaporuBitis, setSatisRaporuBitis] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingSatisRaporu, setLoadingSatisRaporu] = useState(false);
+  const [satisRaporuHata, setSatisRaporuHata] = useState(null);
+
+
+  // YENİ EKLENEN: Saatlik Yoğunluk Raporu State'leri
+  const [saatlikYogunlukData, setSaatlikYogunlukData] = useState(null);
+  const [saatlikYogunlukTarih, setSaatlikYogunlukTarih] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingSaatlikYogunluk, setLoadingSaatlikYogunluk] = useState(false);
+  const [saatlikYogunlukHata, setSaatlikYogunlukHata] = useState(null);
+
+  // YENİ EKLENEN: Ortalama Sepet Tutarı Raporu State'leri
+  const [ortalamaSepetData, setOrtalamaSepetData] = useState(null);
+  const [ortalamaSepetBaslangic, setOrtalamaSepetBaslangic] = useState(() => {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return firstDayOfMonth.toISOString().split('T')[0];
+  });
+  const [ortalamaSepetBitis, setOrtalamaSepetBitis] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingOrtalamaSepet, setLoadingOrtalamaSepet] = useState(false);
+  const [ortalamaSepetHata, setOrtalamaSepetHata] = useState(null);
+
+  // YENİ EKLENEN: Stok Değer Raporu State'leri
+  const [stokDegerRaporuData, setStokDegerRaporuData] = useState(null);
+  const [loadingStokDegerRaporu, setLoadingStokDegerRaporu] = useState(false);
+  const [stokDegerRaporuHata, setStokDegerRaporuHata] = useState(null);
+
+  // YENİ EKLENEN: Tarih Seçimli Günlük İstatistik Raporu State'leri
+  const [seciliGunlukRaporData, setSeciliGunlukRaporData] = useState(null);
+  const [seciliGunlukRaporTarih, setSeciliGunlukRaporTarih] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingSeciliGunlukRapor, setLoadingSeciliGunlukRapor] = useState(false);
+  const [seciliGunlukRaporHata, setSeciliGunlukRaporHata] = useState(null);
+
+  // YENİ EKLENEN: Yıl/Ay Seçimli Aylık İstatistik Raporu State'leri
+  const [seciliAylikRaporData, setSeciliAylikRaporData] = useState(null);
+  const [seciliAylikRaporYil, setSeciliAylikRaporYil] = useState(new Date().getFullYear());
+  const [seciliAylikRaporAy, setSeciliAylikRaporAy] = useState(new Date().getMonth() + 1);
+  const [loadingSeciliAylikRapor, setLoadingSeciliAylikRapor] = useState(false);
+  const [seciliAylikRaporHata, setSeciliAylikRaporHata] = useState(null);
+
+
+  // Dashboard State'leri (Mevcut)
   const [orders, setOrders] = useState([]);
   const [arama, setArama] = useState("");
   const [gunluk, setGunluk] = useState({
@@ -112,8 +209,9 @@ function AdminPaneli() {
   const [populer, setPopuler] = useState([]);
   const [aktifMasaOzetleri, setAktifMasaOzetleri] = useState([]);
   const [dailyIncomeDetailsVisible, setDailyIncomeDetailsVisible] = useState(false);
+  const [yillikChartYil, setYillikChartYil] = useState(new Date().getFullYear()); // YENİ EKLENDİ: Yıllık chart için yıl state'i
 
-  // Menü Yönetimi State'leri
+  // Menü Yönetimi State'leri (Mevcut)
   const [menu, setMenu] = useState([]);
   const initialYeniUrunState = { ad: "", fiyat: "", kategori: "" };
   const [yeniUrun, setYeniUrun] = useState(initialYeniUrunState);
@@ -123,7 +221,7 @@ function AdminPaneli() {
   const [categoryToDelete, setCategoryToDelete] = useState(null);
   const [showAddMenuItemModal, setShowAddMenuItemModal] = useState(false);
 
-  // Kullanıcı Yönetimi State'leri
+  // Kullanıcı Yönetimi State'leri (Mevcut)
   const [kullanicilar, setKullanicilar] = useState([]);
   const initialYeniKullaniciState = { kullanici_adi: "", sifre: "", rol: KULLANICI_ROLLER[1], aktif_mi: true };
   const [yeniKullanici, setYeniKullanici] = useState(initialYeniKullaniciState);
@@ -133,7 +231,7 @@ function AdminPaneli() {
   const [userToDelete, setUserToDelete] = useState(null);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
 
-  // Stok Yönetimi State'leri
+  // Stok Yönetimi State'leri (Mevcut)
   const [stokKategorileri, setStokKategorileri] = useState([]);
   const [showStokKategoriModal, setShowStokKategoriModal] = useState(false);
   const initialEditingStokKategori = { ad: "" };
@@ -147,7 +245,7 @@ function AdminPaneli() {
   const [stokKalemiToDelete, setStokKalemiToDelete] = useState(null);
   const [selectedStokKategoriFilter, setSelectedStokKategoriFilter] = useState("");
 
-  // YENİ EKLENEN: Reçete Yönetimi State'leri
+  // Reçete Yönetimi State'leri (Mevcut)
   const [menuUrunReceteleri, setMenuUrunReceteleri] = useState([]);
   const [menuItemsForRecipe, setMenuItemsForRecipe] = useState([]);
   const [stockItemsForRecipe, setStockItemsForRecipe] = useState([]);
@@ -158,14 +256,13 @@ function AdminPaneli() {
     aciklama: "",
     porsiyon_birimi: "adet",
     porsiyon_miktari: 1,
-    bilesenler: [], // [{ stok_kalemi_id: "", miktar: "", birim: "" }, ...]
+    bilesenler: [],
   };
   const [editingRecipe, setEditingRecipe] = useState(initialEditingRecipeState);
   const [recipeToDelete, setRecipeToDelete] = useState(null);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
-  // YENİ EKLENEN KISIM SONU
 
-  // Yükleme Durumları
+  // Yükleme Durumları (Mevcut)
   const [loadingDashboardStats, setLoadingDashboardStats] = useState(false);
   const [loadingMenu, setLoadingMenu] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -182,12 +279,14 @@ function AdminPaneli() {
   const handleApiError = useCallback((err, defaultMessage = "Bilinmeyen bir hata oluştu.", context = "Bilinmeyen İşlem") => {
     const errorDetail = err.response?.data?.detail || err.message || defaultMessage;
     logError(`❌ ${context} hatası:`, err);
-    setError(`${context}: ${errorDetail}`);
+    setError(`${context}: ${errorDetail}`); // Genel hata state'i
     if (err.response?.status === 401 || err.response?.status === 403) {
       alert("Oturumunuz sonlanmış veya bu işlem için yetkiniz bulunmuyor. Lütfen tekrar giriş yapın.");
       logout();
     }
+    return errorDetail; // Hata detayını döndür, özel hata state'leri için kullanılabilir
   }, [logError, logout, setError]);
+
 
   const fetchMenuKategorileri = useCallback(async () => {
     logInfo("🗂️ Menü kategorileri getiriliyor...");
@@ -209,15 +308,16 @@ function AdminPaneli() {
     finally { setLoadingUsers(false); }
   }, [logInfo, handleApiError]);
 
-  const verileriGetir = useCallback(async () => {
-    logInfo(`🔄 Dashboard verileri ve menü ürünleri getiriliyor...`);
+  // GÜNCELLENDİ: Yıllık chart için yıl parametresi eklendi
+  const verileriGetir = useCallback(async (selectedYil = new Date().getFullYear()) => {
+    logInfo(`🔄 Dashboard verileri ve menü ürünleri getiriliyor (Yıl: ${selectedYil})...`);
     setLoadingDashboardStats(true); setError(null);
     try {
       const [ siparisRes, gunlukRes, aylikRes, yillikRes, populerRes, aktifMasalarTutarlariRes, menuRes ] = await Promise.all([
         apiClient.get(`/siparisler`),
-        apiClient.get(`/istatistik/gunluk`),
-        apiClient.get(`/istatistik/aylik`),
-        apiClient.get(`/istatistik/yillik-aylik-kirilim`),
+        apiClient.get(`/istatistik/gunluk`), // Bu hala güncel günü alacak, özel tarihli rapor ayrı
+        apiClient.get(`/istatistik/aylik`),  // Bu hala güncel ayı alacak, özel tarihli rapor ayrı
+        apiClient.get(`/istatistik/yillik-aylik-kirilim`, { params: { yil: selectedYil } }), // Yıl parametresi eklendi
         apiClient.get(`/istatistik/en-cok-satilan`),
         apiClient.get(`/admin/aktif-masa-tutarlari`),
         apiClient.get(`/menu`),
@@ -259,12 +359,10 @@ function AdminPaneli() {
     finally { setLoadingStok(false); }
   }, [logInfo, handleApiError]);
 
-  // YENİ EKLENEN: Reçete verilerini çekme fonksiyonları
   const fetchMenuUrunReceteleri = useCallback(async () => {
     logInfo("🍲 Menü ürün reçeteleri getiriliyor...");
     setLoadingRecipes(true); setError(null);
     try {
-      // Backend'de bu endpoint'in oluşturulması gerekecek: GET /admin/receteler
       const response = await apiClient.get("/admin/receteler");
       setMenuUrunReceteleri(response.data || []);
     } catch (err) { handleApiError(err, "Reçeteler alınamadı", "Reçete Listeleme"); }
@@ -275,7 +373,6 @@ function AdminPaneli() {
     logInfo("🍜 Reçete için menü ürünleri (basit liste) getiriliyor...");
     setLoadingMenu(true);
     try {
-      // Backend'de bu endpoint'in oluşturulması lazım: GET /admin/menu-items-simple
       const response = await apiClient.get("/admin/menu-items-simple");
       setMenuItemsForRecipe(response.data || []);
     } catch (err) { handleApiError(err, "Menü ürünleri (reçete için) alınamadı", "Yardımcı Menü Listesi"); }
@@ -286,26 +383,120 @@ function AdminPaneli() {
     logInfo("🧱 Reçete için stok kalemleri (basit liste) getiriliyor...");
     setLoadingStok(true);
     try {
-      // Backend'de bu endpoint'in oluşturulması lazım: GET /admin/stock-items-simple
       const response = await apiClient.get("/admin/stock-items-simple");
       setStockItemsForRecipe(response.data || []);
     } catch (err) { handleApiError(err, "Stok kalemleri (reçete için) alınamadı", "Yardımcı Stok Listesi"); }
     finally { setLoadingStok(false); }
   }, [logInfo, handleApiError]);
-  // YENİ EKLENEN KISIM SONU
+
+  // YENİ EKLENEN: Rapor Fetch Fonksiyonları
+  const fetchDetayliSatisRaporu = useCallback(async () => {
+    logInfo(`📊 Detaylı satış raporu getiriliyor: ${satisRaporuBaslangic} - ${satisRaporuBitis}`);
+    setLoadingSatisRaporu(true); setSatisRaporuHata(null); setDetayliSatisRaporu(null);
+    try {
+        const response = await apiClient.get("/istatistik/satis-raporu", {
+            params: { baslangic_tarihi_str: satisRaporuBaslangic, bitis_tarihi_str: satisRaporuBitis }
+        });
+        setDetayliSatisRaporu(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Detaylı satış raporu alınamadı", "Detaylı Satış Raporu");
+        setSatisRaporuHata(errorMsg);
+    } finally {
+        setLoadingSatisRaporu(false);
+    }
+  }, [satisRaporuBaslangic, satisRaporuBitis, logInfo, handleApiError]);
+
+  const fetchSaatlikYogunluk = useCallback(async () => {
+    logInfo(`🕒 Saatlik yoğunluk raporu getiriliyor: ${saatlikYogunlukTarih}`);
+    setLoadingSaatlikYogunluk(true); setSaatlikYogunlukHata(null); setSaatlikYogunlukData(null);
+    try {
+        const response = await apiClient.get("/istatistik/saatlik-yogunluk", {
+            params: { tarih_str: saatlikYogunlukTarih }
+        });
+        setSaatlikYogunlukData(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Saatlik yoğunluk raporu alınamadı", "Saatlik Yoğunluk Raporu");
+        setSaatlikYogunlukHata(errorMsg);
+    } finally {
+        setLoadingSaatlikYogunluk(false);
+    }
+  }, [saatlikYogunlukTarih, logInfo, handleApiError]);
+
+  const fetchOrtalamaSepetTutari = useCallback(async () => {
+    logInfo(`🧺 Ortalama sepet tutarı raporu: ${ortalamaSepetBaslangic} - ${ortalamaSepetBitis}`);
+    setLoadingOrtalamaSepet(true); setOrtalamaSepetHata(null); setOrtalamaSepetData(null);
+    try {
+        const response = await apiClient.get("/istatistik/ortalama-sepet-tutari", {
+            params: { baslangic_tarihi_str: ortalamaSepetBaslangic, bitis_tarihi_str: ortalamaSepetBitis }
+        });
+        setOrtalamaSepetData(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Ortalama sepet tutarı raporu alınamadı", "Ortalama Sepet Raporu");
+        setOrtalamaSepetHata(errorMsg);
+    } finally {
+        setLoadingOrtalamaSepet(false);
+    }
+  }, [ortalamaSepetBaslangic, ortalamaSepetBitis, logInfo, handleApiError]);
+
+  const fetchStokDegerRaporu = useCallback(async () => {
+    logInfo(`📦 Stok değer raporu getiriliyor...`);
+    setLoadingStokDegerRaporu(true); setStokDegerRaporuHata(null); setStokDegerRaporuData(null);
+    try {
+        const response = await apiClient.get("/admin/stok/deger-raporu");
+        setStokDegerRaporuData(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Stok değer raporu alınamadı", "Stok Değer Raporu");
+        setStokDegerRaporuHata(errorMsg);
+    } finally {
+        setLoadingStokDegerRaporu(false);
+    }
+  }, [logInfo, handleApiError]);
+
+  const fetchSeciliGunlukRapor = useCallback(async () => {
+    logInfo(`📅 Seçili günlük rapor getiriliyor: ${seciliGunlukRaporTarih}`);
+    setLoadingSeciliGunlukRapor(true); setSeciliGunlukRaporHata(null); setSeciliGunlukRaporData(null);
+    try {
+        const response = await apiClient.get("/istatistik/gunluk", {
+            params: { tarih_str: seciliGunlukRaporTarih }
+        });
+        setSeciliGunlukRaporData(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Seçili günlük rapor alınamadı", "Tarihli Günlük Rapor");
+        setSeciliGunlukRaporHata(errorMsg);
+    } finally {
+        setLoadingSeciliGunlukRapor(false);
+    }
+  }, [seciliGunlukRaporTarih, logInfo, handleApiError]);
+
+  const fetchSeciliAylikRapor = useCallback(async () => {
+    logInfo(`🗓️ Seçili aylık rapor getiriliyor: Yıl ${seciliAylikRaporYil}, Ay ${seciliAylikRaporAy}`);
+    setLoadingSeciliAylikRapor(true); setSeciliAylikRaporHata(null); setSeciliAylikRaporData(null);
+    try {
+        const response = await apiClient.get("/istatistik/aylik", {
+            params: { yil: seciliAylikRaporYil, ay: seciliAylikRaporAy }
+        });
+        setSeciliAylikRaporData(response.data);
+    } catch (err) {
+        const errorMsg = handleApiError(err, "Seçili aylık rapor alınamadı", "Yıl/Ay Seçimli Aylık Rapor");
+        setSeciliAylikRaporHata(errorMsg);
+    } finally {
+        setLoadingSeciliAylikRapor(false);
+    }
+  }, [seciliAylikRaporYil, seciliAylikRaporAy, logInfo, handleApiError]);
 
 
   const refreshAllAdminData = useCallback(() => {
     logInfo("🔄 Tüm admin verileri yenileniyor...");
-    verileriGetir();
+    verileriGetir(yillikChartYil); // GÜNCELLENDİ: Yıllık chart için yıl parametresi ile çağrı
     kullanicilariGetir();
     fetchMenuKategorileri();
     fetchStokKategorileri();
     fetchStokKalemleri(selectedStokKategoriFilter || null);
-    fetchMenuUrunReceteleri(); // YENİ EKLENDİ
-    fetchMenuItemsForRecipeSelection(); 
+    fetchMenuUrunReceteleri();
+    fetchMenuItemsForRecipeSelection();
     fetchStockItemsForRecipeSelection();
-  }, [verileriGetir, kullanicilariGetir, fetchMenuKategorileri, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, logInfo]); // YENİ: fetchMenuUrunReceteleri eklendi
+    // Yeni raporlar için varsayılan bir çağrı gerekirse eklenebilir, ancak genellikle kullanıcı etkileşimiyle tetiklenirler.
+  }, [verileriGetir, yillikChartYil, kullanicilariGetir, fetchMenuKategorileri, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, fetchMenuItemsForRecipeSelection, fetchStockItemsForRecipeSelection, logInfo]);
 
   useEffect(() => {
     if (!loadingAuth) {
@@ -337,12 +528,12 @@ function AdminPaneli() {
           try {
             const message = JSON.parse(event.data);
             logInfo(`📥 Admin WS mesajı: Tip: ${message.type}`);
-            if (["siparis", "durum", "masa_durum"].includes(message.type)) { verileriGetir(); }
-            else if (message.type === "menu_guncellendi") { fetchMenuKategorileri(); verileriGetir(); fetchMenuItemsForRecipeSelection(); }
-            else if (message.type === "kategori_guncellendi") { fetchMenuKategorileri(); verileriGetir(); }
+            if (["siparis", "durum", "masa_durum"].includes(message.type)) { verileriGetir(yillikChartYil); } // GÜNCELLENDİ
+            else if (message.type === "menu_guncellendi") { fetchMenuKategorileri(); verileriGetir(yillikChartYil); fetchMenuItemsForRecipeSelection(); } // GÜNCELLENDİ
+            else if (message.type === "kategori_guncellendi") { fetchMenuKategorileri(); verileriGetir(yillikChartYil); } // GÜNCELLENDİ
             else if (message.type === "stok_guncellendi") { fetchStokKategorileri(); fetchStokKalemleri(selectedStokKategoriFilter || null); fetchStockItemsForRecipeSelection(); }
             else if (message.type === "kullanici_guncellendi") { kullanicilariGetir(); }
-            else if (message.type === "recete_guncellendi") { fetchMenuUrunReceteleri(); } // YENİ EKLENDİ
+            else if (message.type === "recete_guncellendi") { fetchMenuUrunReceteleri(); }
           } catch (err) { logError("Admin WS mesaj işleme hatası:", err); }
         };
         wsRef.current.onerror = (err) => { logError("❌ Admin WS hatası:", err); setError("WS bağlantı hatası."); };
@@ -360,7 +551,7 @@ function AdminPaneli() {
       else if (isAuthenticated && userRole === 'admin' && !wsRef.current) { connectWebSocket(); }
     }, 30000);
     return () => { clearInterval(pingIntervalId); if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId); if (wsRef.current) { wsRef.current.close(1000, "Component unmounting"); wsRef.current = null;}};
-  }, [isAuthenticated, userRole, loadingAuth, verileriGetir, fetchMenuKategorileri, kullanicilariGetir, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, fetchMenuItemsForRecipeSelection, fetchStockItemsForRecipeSelection, logInfo, logError, setError]); // YENİ: fetchMenuUrunReceteleri ve diğerleri eklendi.
+  }, [isAuthenticated, userRole, loadingAuth, verileriGetir, yillikChartYil, fetchMenuKategorileri, kullanicilariGetir, fetchStokKategorileri, fetchStokKalemleri, selectedStokKategoriFilter, fetchMenuUrunReceteleri, fetchMenuItemsForRecipeSelection, fetchStockItemsForRecipeSelection, logInfo, logError, setError]);
 
   const urunEkle = useCallback(async (e) => {
     e.preventDefault();
@@ -373,12 +564,12 @@ function AdminPaneli() {
       alert("Ürün başarıyla eklendi.");
       setYeniUrun(initialYeniUrunState);
       setShowAddMenuItemModal(false);
-      await verileriGetir();
+      await verileriGetir(yillikChartYil); // GÜNCELLENDİ
       await fetchMenuKategorileri();
       await fetchMenuItemsForRecipeSelection();
     } catch (err) { handleApiError(err, "Ürün eklenemedi", "Menü Ürün Ekleme"); }
     finally { setLoadingMenu(false); }
-  }, [yeniUrun, verileriGetir, fetchMenuKategorileri, fetchMenuItemsForRecipeSelection, handleApiError, initialYeniUrunState]);
+  }, [yeniUrun, verileriGetir, yillikChartYil, fetchMenuKategorileri, fetchMenuItemsForRecipeSelection, handleApiError, initialYeniUrunState]);
 
   const urunSil = useCallback(async (e) => {
     e.preventDefault();
@@ -390,12 +581,12 @@ function AdminPaneli() {
       await apiClient.delete(`/menu/sil`, { params: { urun_adi: urunAdiTrimmed } });
       alert("Ürün başarıyla silindi.");
       setSilUrunAdi("");
-      await verileriGetir();
+      await verileriGetir(yillikChartYil); // GÜNCELLENDİ
       await fetchMenuItemsForRecipeSelection();
       await fetchMenuUrunReceteleri();
     } catch (err) { handleApiError(err, "Ürün silinemedi", "Menü Ürün Silme"); }
     finally { setLoadingMenu(false); }
-  }, [silUrunAdi, verileriGetir, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
+  }, [silUrunAdi, verileriGetir, yillikChartYil, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
 
   const openDeleteCategoryModal = (kategori) => { setCategoryToDelete(kategori); setShowDeleteCategoryModal(true); };
   const confirmDeleteMenuKategori = useCallback(async () => {
@@ -406,12 +597,12 @@ function AdminPaneli() {
       alert(`'${categoryToDelete.isim}' kategorisi ve bağlı tüm ürünler silindi.`);
       setShowDeleteCategoryModal(false); setCategoryToDelete(null);
       await fetchMenuKategorileri();
-      await verileriGetir();
+      await verileriGetir(yillikChartYil); // GÜNCELLENDİ
       await fetchMenuItemsForRecipeSelection();
       await fetchMenuUrunReceteleri();
     } catch (err) { handleApiError(err, "Menü kategorisi silinemedi", "Menü Kategori Silme"); }
     finally { setLoadingMenu(false); }
-  }, [categoryToDelete, fetchMenuKategorileri, verileriGetir, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
+  }, [categoryToDelete, fetchMenuKategorileri, verileriGetir, yillikChartYil, fetchMenuItemsForRecipeSelection, fetchMenuUrunReceteleri, handleApiError]);
 
 
   const handleYeniKullaniciChange = (e) => { const { name, value, type, checked } = e.target; setYeniKullanici(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value })); };
@@ -513,8 +704,19 @@ function AdminPaneli() {
     setLoadingStok(true); setError(null);
     const payloadBase = { ad: ad.trim(), stok_kategori_id: parseInt(stok_kategori_id, 10), birim: birim.trim(), min_stok_seviyesi: parseFloat(min_stok_seviyesi) || 0 };
     let payload;
-    if (id) { payload = { ...payloadBase }; }
-    else { payload = { ...payloadBase, mevcut_miktar: parseFloat(mevcut_miktar) || 0, son_alis_fiyati: son_alis_fiyati && String(son_alis_fiyati).trim() !== "" ? parseFloat(son_alis_fiyati) : null }; }
+    if (id) { // Düzenleme: mevcut_miktar ve son_alis_fiyati payload'a dahil edilmeyecek (backend Pydantic modeline göre)
+        payload = { ...payloadBase };
+        if (editingStokKalemi.mevcut_miktar !== undefined && String(editingStokKalemi.mevcut_miktar).trim() !== "") { // Sadece PUT için bu alanları eklemiyoruz, backend bunu beklemiyor olabilir. Backend'i kontrol et.
+            // Eğer backend StokKalemiUpdate'de mevcut_miktar ve son_alis_fiyati beklemiyorsa, bu satırlar kaldırılmalı.
+            // Şimdilik backend'in bunları beklemediğini varsayarak yorum satırı yapıyorum.
+            // payload.mevcut_miktar = parseFloat(editingStokKalemi.mevcut_miktar)
+        }
+        if (editingStokKalemi.son_alis_fiyati !== undefined && String(editingStokKalemi.son_alis_fiyati).trim() !== "") {
+            // payload.son_alis_fiyati = parseFloat(editingStokKalemi.son_alis_fiyati)
+        }
+    } else { // Ekleme
+        payload = { ...payloadBase, mevcut_miktar: parseFloat(mevcut_miktar) || 0, son_alis_fiyati: son_alis_fiyati && String(son_alis_fiyati).trim() !== "" ? parseFloat(son_alis_fiyati) : null };
+    }
 
     try {
       if (id) { await apiClient.put(`/admin/stok/kalemler/${id}`, payload); alert("Stok kalemi güncellendi."); }
@@ -542,7 +744,6 @@ function AdminPaneli() {
 
   useEffect(() => { if(isAuthenticated && userRole === 'admin' && !loadingAuth) fetchStokKalemleri(selectedStokKategoriFilter || null); }, [selectedStokKategoriFilter, isAuthenticated, userRole, loadingAuth, fetchStokKalemleri]);
 
-  // YENİ EKLENEN: Reçete Yönetimi Fonksiyonları
   const openRecipeModal = useCallback((recipe = null) => {
     fetchMenuItemsForRecipeSelection();
     fetchStockItemsForRecipeSelection();
@@ -552,7 +753,7 @@ function AdminPaneli() {
         ...recipe,
         menu_urun_id: recipe.menu_urun_id || "",
         bilesenler: recipe.bilesenler?.map(b => ({
-          id: b.id, // Eğer backend'den bileşen ID'si geliyorsa ve düzenleme için önemliyse
+          id: b.id,
           stok_kalemi_id: b.stok_kalemi_id || "",
           miktar: b.miktar || "",
           birim: b.birim || "",
@@ -650,7 +851,6 @@ function AdminPaneli() {
     } catch (err) { handleApiError(err, "Reçete silinemedi", "Reçete Silme"); }
     finally { setLoadingRecipes(false); }
   }, [recipeToDelete, fetchMenuUrunReceteleri, handleApiError]);
-  // YENİ EKLENEN KISIM SONU
 
 
   const filtrelenmisSiparisler = orders.filter((o) => {
@@ -692,7 +892,7 @@ function AdminPaneli() {
     );
   }
 
-  const anyLoading = loadingDashboardStats || loadingUsers || loadingMenu || loadingStok || loadingRecipes; // YENİ: loadingRecipes eklendi
+  const anyLoading = loadingDashboardStats || loadingUsers || loadingMenu || loadingStok || loadingRecipes || loadingSatisRaporu || loadingSaatlikYogunluk || loadingOrtalamaSepet || loadingStokDegerRaporu || loadingSeciliGunlukRapor || loadingSeciliAylikRapor; // GÜNCELLENDİ: Yeni rapor yükleme durumları eklendi
 
   return (
     <div className="p-4 md:p-6 bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 min-h-screen text-slate-800 font-['Nunito',_sans-serif] relative">
@@ -733,7 +933,7 @@ function AdminPaneli() {
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <div className="bg-white p-4 sm:p-5 rounded-xl shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
           <h3 className="text-xs sm:text-sm font-semibold mb-1 flex items-center gap-2 text-slate-500">
-            <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Günlük Satılan Ürün
+            <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> Günlük Satılan Ürün (Bugün)
           </h3>
           <CountUp end={gunluk?.satilan_urun_adedi || 0} separator="." className="text-2xl sm:text-3xl font-bold text-blue-600 block"/>
         </div>
@@ -745,7 +945,7 @@ function AdminPaneli() {
           onClick={(e) => { e.stopPropagation(); setDailyIncomeDetailsVisible(prev => !prev);}}
         >
           <h3 className="text-xs sm:text-sm font-semibold mb-1 flex items-center justify-between text-slate-500">
-            <span><DollarSign className="w-4 h-4 sm:w-5 sm:h-5 inline-block mr-1.5 text-green-500" /> Günlük Gelir</span>
+            <span><DollarSign className="w-4 h-4 sm:w-5 sm:h-5 inline-block mr-1.5 text-green-500" /> Günlük Gelir (Bugün)</span>
             <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${dailyIncomeDetailsVisible ? 'rotate-180' : ''}`}/>
           </h3>
           <CountUp end={gunluk?.toplam_gelir || 0} separator="." decimal="," decimals={2} prefix="₺" className="text-2xl sm:text-3xl font-bold text-green-600 block"/>
@@ -810,7 +1010,24 @@ function AdminPaneli() {
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 md:mb-8">
         <div className="bg-white p-5 sm:p-6 rounded-xl shadow-lg">
-          <h3 className="text-base sm:text-lg font-semibold mb-4 text-slate-700">Yıllık Satış Adetleri (Aylık Kırılım)</h3>
+          <div className="flex justify-between items-center mb-1">
+            <h3 className="text-base sm:text-lg font-semibold text-slate-700">Yıllık Satış Adetleri ({yillikChartYil})</h3>
+            {/* YENİ EKLENDİ: Yıl seçici */}
+            <select
+                value={yillikChartYil}
+                onChange={(e) => {
+                    const newYear = parseInt(e.target.value);
+                    setYillikChartYil(newYear);
+                    verileriGetir(newYear); // Verileri yeni yıla göre çek
+                }}
+                className="p-1 border border-slate-300 rounded-md text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            >
+                {[...Array(5)].map((_, i) => {
+                    const year = new Date().getFullYear() - i;
+                    return <option key={year} value={year}>{year}</option>;
+                })}
+            </select>
+          </div>
           {loadingDashboardStats && yillikChartData.length === 0 && <p className="text-sm text-slate-500 py-10 text-center">Grafik verileri yükleniyor...</p>}
           {!loadingDashboardStats && yillikChartData.length === 0 && <p className="text-sm text-slate-500 py-10 text-center">Bu yıl için satış verisi bulunmuyor.</p>}
           {yillikChartData.length > 0 && (
@@ -818,10 +1035,14 @@ function AdminPaneli() {
               <BarChart data={yillikChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="tarih" tick={{ fontSize: 10 }} stroke="#64748b" />
-                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
-                <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: '0.5rem', borderColor: '#cbd5e1' }} itemStyle={{ color: '#334155' }} labelStyle={{ color: '#0f172a', fontWeight: 'bold' }} />
+                <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" tick={{ fontSize: 10 }} label={{ value: 'Adet', angle: -90, position: 'insideLeft', fill: '#3b82f6', fontSize: 10 }}/>
+                <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10 }} label={{ value: 'Gelir (₺)', angle: 90, position: 'insideRight', fill: '#10b981', fontSize: 10 }}/>
+                <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: '0.5rem', borderColor: '#cbd5e1' }} itemStyle={{ color: '#334155' }} labelStyle={{ color: '#0f172a', fontWeight: 'bold' }}
+                  formatter={(value, name) => name === "Gelir (₺)" ? `₺${Number(value).toFixed(2)}` : value}
+                />
                 <Legend wrapperStyle={{ fontSize: '12px' }} />
-                <Bar dataKey="adet" fill="#3b82f6" name="Satılan Ürün Adedi" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="adet" fill="#3b82f6" name="Satılan Ürün Adedi" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="right" dataKey="gelir" fill="#10b981" name="Gelir (₺)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -844,6 +1065,200 @@ function AdminPaneli() {
           )}
         </div>
       </section>
+
+      {/* YENİ EKLENEN: Detaylı Raporlar Bölümü */}
+      <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
+        <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={() => setShowReports(!showReports)}>
+            <h3 className="text-xl font-semibold text-slate-700 flex items-center gap-3">
+                <BarChart3 className="w-6 h-6 text-sky-600" /> Detaylı Raporlar
+            </h3>
+            <ChevronDown size={24} className={`text-slate-500 transition-transform ${showReports ? 'rotate-180' : ''}`} />
+        </div>
+        {showReports && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-200">
+                {/* Detaylı Satış Raporu */}
+                <ReportCard title="Detaylı Satış Raporu" icon={Table2} isLoading={loadingSatisRaporu} error={satisRaporuHata} onFetch={fetchDetayliSatisRaporu} defaultOpen={true}>
+                    {/* Filtreler */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 text-xs">
+                        <div>
+                            <label htmlFor="satisRaporuBaslangic" className="block text-slate-600 mb-0.5">Başlangıç Tarihi</label>
+                            <input type="date" id="satisRaporuBaslangic" value={satisRaporuBaslangic} onChange={(e) => setSatisRaporuBaslangic(e.target.value)} className="w-full p-1.5 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500"/>
+                        </div>
+                        <div>
+                            <label htmlFor="satisRaporuBitis" className="block text-slate-600 mb-0.5">Bitiş Tarihi</label>
+                            <input type="date" id="satisRaporuBitis" value={satisRaporuBitis} onChange={(e) => setSatisRaporuBitis(e.target.value)} className="w-full p-1.5 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500"/>
+                        </div>
+                    </div>
+                    {/* Sonuçlar */}
+                    {detayliSatisRaporu && (
+                        <div className="space-y-4 text-xs sm:text-sm">
+                            <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                                <p><strong>Rapor Tarih Aralığı:</strong> {new Date(detayliSatisRaporu.baslangic_tarihi).toLocaleDateString('tr-TR')} - {new Date(detayliSatisRaporu.bitis_tarihi).toLocaleDateString('tr-TR')}</p>
+                                <p><strong>Genel Toplam Gelir:</strong> ₺{Number(detayliSatisRaporu.genel_toplam_gelir).toFixed(2)}</p>
+                                <p><strong>Genel Toplam Satılan Adet:</strong> {detayliSatisRaporu.genel_toplam_adet}</p>
+                            </div>
+                            <div>
+                                <h5 className="font-semibold mb-1 text-slate-600">Ürün Bazlı Satışlar ({detayliSatisRaporu.urun_bazli_satislar?.length || 0})</h5>
+                                {detayliSatisRaporu.urun_bazli_satislar?.length > 0 ? (
+                                <div className="overflow-auto max-h-60 border rounded-md">
+                                    <table className="min-w-full divide-y divide-slate-200">
+                                        <thead className="bg-slate-100 sticky top-0"><tr><th className="px-2 py-1.5 text-left font-medium text-slate-700">Ürün</th><th className="px-2 py-1.5 text-left font-medium text-slate-700">Kategori</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Adet</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Gelir (₺)</th></tr></thead>
+                                        <tbody className="bg-white divide-y divide-slate-100">
+                                            {detayliSatisRaporu.urun_bazli_satislar.map(u => <tr key={u.urun_adi + u.kategori_adi}><td className="px-2 py-1 whitespace-nowrap">{u.urun_adi}</td><td className="px-2 py-1 whitespace-nowrap">{u.kategori_adi}</td><td className="px-2 py-1 whitespace-nowrap text-right">{u.satilan_adet}</td><td className="px-2 py-1 whitespace-nowrap text-right font-medium">{Number(u.toplam_gelir).toFixed(2)}</td></tr>)}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                ) : <p className="text-slate-500">Bu tarih aralığında ürün bazlı satış verisi bulunamadı.</p>}
+                            </div>
+                            <div>
+                                <h5 className="font-semibold mb-1 text-slate-600">Kategori Bazlı Satışlar ({detayliSatisRaporu.kategori_bazli_satislar?.length || 0})</h5>
+                                {detayliSatisRaporu.kategori_bazli_satislar?.length > 0 ? (
+                                <div className="overflow-auto max-h-60 border rounded-md">
+                                    <table className="min-w-full divide-y divide-slate-200">
+                                        <thead className="bg-slate-100 sticky top-0"><tr><th className="px-2 py-1.5 text-left font-medium text-slate-700">Kategori</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Adet</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Gelir (₺)</th></tr></thead>
+                                        <tbody className="bg-white divide-y divide-slate-100">
+                                            {detayliSatisRaporu.kategori_bazli_satislar.map(k => <tr key={k.kategori_adi}><td className="px-2 py-1 whitespace-nowrap">{k.kategori_adi}</td><td className="px-2 py-1 whitespace-nowrap text-right">{k.satilan_adet}</td><td className="px-2 py-1 whitespace-nowrap text-right font-medium">{Number(k.toplam_gelir).toFixed(2)}</td></tr>)}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                ) : <p className="text-slate-500">Bu tarih aralığında kategori bazlı satış verisi bulunamadı.</p>}
+                            </div>
+                        </div>
+                    )}
+                    {!detayliSatisRaporu && !loadingSatisRaporu && !satisRaporuHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için tarih aralığı seçip butona tıklayın.</p>}
+                </ReportCard>
+
+                {/* Saatlik Yoğunluk Raporu */}
+                <ReportCard title="Saatlik Yoğunluk Raporu" icon={Hourglass} isLoading={loadingSaatlikYogunluk} error={saatlikYogunlukHata} onFetch={fetchSaatlikYogunluk}>
+                    {/* Filtreler */}
+                    <div className="mb-3 text-xs">
+                        <label htmlFor="saatlikYogunlukTarih" className="block text-slate-600 mb-0.5">Tarih</label>
+                        <input type="date" id="saatlikYogunlukTarih" value={saatlikYogunlukTarih} onChange={(e) => setSaatlikYogunlukTarih(e.target.value)} className="w-full sm:w-auto p-1.5 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500"/>
+                    </div>
+                    {/* Sonuçlar */}
+                    {saatlikYogunlukData && (
+                        <div className="text-xs sm:text-sm">
+                            <p className="mb-2"><strong>Rapor Tarihi:</strong> {new Date(saatlikYogunlukData.tarih).toLocaleDateString('tr-TR')}</p>
+                            {saatlikYogunlukData.saatlik_veri?.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <BarChart data={saatlikYogunlukData.saatlik_veri}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0"/>
+                                        <XAxis dataKey="saat" tickFormatter={(saat) => `${String(saat).padStart(2, '0')}:00`} tick={{fontSize: 10}}/>
+                                        <YAxis yAxisId="left" orientation="left" stroke="#8884d8" tick={{fontSize: 10}} label={{ value: 'Sipariş Sayısı', angle: -90, position: 'insideLeft', fontSize:10, fill: '#8884d8' }}/>
+                                        <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tick={{fontSize: 10}} label={{ value: 'Gelir (₺)', angle: 90, position: 'insideRight', fontSize:10, fill: '#82ca9d' }}/>
+                                        <Tooltip formatter={(value, name) => name === "Toplam Gelir" ? `₺${Number(value).toFixed(2)}` : value}/>
+                                        <Legend wrapperStyle={{fontSize: '11px'}}/>
+                                        <Bar yAxisId="left" dataKey="siparis_sayisi" fill="#8884d8" name="Sipariş Sayısı" radius={[3,3,0,0]}/>
+                                        <Bar yAxisId="right" dataKey="toplam_gelir" fill="#82ca9d" name="Toplam Gelir" radius={[3,3,0,0]}/>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                             ) : <p className="text-slate-500">Bu tarih için veri bulunamadı.</p>}
+                        </div>
+                    )}
+                     {!saatlikYogunlukData && !loadingSaatlikYogunluk && !saatlikYogunlukHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için tarih seçip butona tıklayın.</p>}
+                </ReportCard>
+
+                {/* Ortalama Sepet Tutarı Raporu */}
+                <ReportCard title="Ortalama Sepet Tutarı" icon={PercentCircle} isLoading={loadingOrtalamaSepet} error={ortalamaSepetHata} onFetch={fetchOrtalamaSepetTutari}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 text-xs">
+                        <div>
+                            <label htmlFor="ortalamaSepetBaslangic" className="block text-slate-600 mb-0.5">Başlangıç Tarihi</label>
+                            <input type="date" id="ortalamaSepetBaslangic" value={ortalamaSepetBaslangic} onChange={(e) => setOrtalamaSepetBaslangic(e.target.value)} className="w-full p-1.5 border border-slate-300 rounded-md"/>
+                        </div>
+                        <div>
+                            <label htmlFor="ortalamaSepetBitis" className="block text-slate-600 mb-0.5">Bitiş Tarihi</label>
+                            <input type="date" id="ortalamaSepetBitis" value={ortalamaSepetBitis} onChange={(e) => setOrtalamaSepetBitis(e.target.value)} className="w-full p-1.5 border border-slate-300 rounded-md"/>
+                        </div>
+                    </div>
+                    {ortalamaSepetData && (
+                        <div className="space-y-1 text-sm text-slate-700 p-3 bg-blue-50 rounded-md border border-blue-200">
+                            <p><strong>Tarih Aralığı:</strong> {new Date(ortalamaSepetData.baslangic_tarihi).toLocaleDateString('tr-TR')} - {new Date(ortalamaSepetData.bitis_tarihi).toLocaleDateString('tr-TR')}</p>
+                            <p><strong>Toplam Gelir:</strong> <span className="font-semibold">₺{Number(ortalamaSepetData.toplam_gelir).toFixed(2)}</span></p>
+                            <p><strong>Toplam Sipariş Sayısı:</strong> <span className="font-semibold">{ortalamaSepetData.toplam_siparis_sayisi}</span></p>
+                            <p><strong>Ortalama Sepet Tutarı:</strong> <span className="font-bold text-blue-600 text-md">₺{Number(ortalamaSepetData.ortalama_sepet_tutari).toFixed(2)}</span></p>
+                        </div>
+                    )}
+                    {!ortalamaSepetData && !loadingOrtalamaSepet && !ortalamaSepetHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için tarih aralığı seçip butona tıklayın.</p>}
+                </ReportCard>
+
+                {/* Stok Değer Raporu */}
+                <ReportCard title="Stok Değer Raporu" icon={PackageSearch} isLoading={loadingStokDegerRaporu} error={stokDegerRaporuHata} onFetch={fetchStokDegerRaporu} defaultOpen={false}>
+                     {/* Filtre yok, sadece buton */}
+                     <div className="mb-3"></div>
+                     {/* Sonuçlar */}
+                    {stokDegerRaporuData && (
+                        <div className="space-y-3 text-xs sm:text-sm">
+                            <div className="p-3 bg-green-50 rounded-md border border-green-200">
+                                <p><strong>Rapor Tarihi:</strong> {new Date(stokDegerRaporuData.rapor_tarihi).toLocaleString('tr-TR')}</p>
+                                <p><strong>Genel Toplam Stok Değeri:</strong> <span className="font-bold text-green-600 text-md">₺{Number(stokDegerRaporuData.genel_toplam_stok_degeri).toFixed(2)}</span></p>
+                                <p><strong>Değeri Hesaplanamayan Kalem Sayısı:</strong> {stokDegerRaporuData.degeri_hesaplanamayan_kalem_sayisi}</p>
+                            </div>
+                            {stokDegerRaporuData.kategori_bazli_degerler?.length > 0 ? (
+                                <div className="overflow-auto max-h-60 border rounded-md">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-100 sticky top-0"><tr><th className="px-2 py-1.5 text-left font-medium text-slate-700">Stok Kategorisi</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Kalem Sayısı</th><th className="px-2 py-1.5 text-right font-medium text-slate-700">Toplam Değer (₺)</th></tr></thead>
+                                    <tbody className="bg-white divide-y divide-slate-100">
+                                        {stokDegerRaporuData.kategori_bazli_degerler.map(k => <tr key={k.stok_kategori_ad}><td className="px-2 py-1 whitespace-nowrap">{k.stok_kategori_ad}</td><td className="px-2 py-1 whitespace-nowrap text-right">{k.kalem_sayisi}</td><td className="px-2 py-1 whitespace-nowrap text-right font-medium">{Number(k.kategori_toplam_deger).toFixed(2)}</td></tr>)}
+                                    </tbody>
+                                </table>
+                                </div>
+                            ) : <p className="text-slate-500">Kategori bazlı stok değeri verisi bulunamadı.</p>}
+                        </div>
+                    )}
+                    {!stokDegerRaporuData && !loadingStokDegerRaporu && !stokDegerRaporuHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için butona tıklayın.</p>}
+                </ReportCard>
+
+                 {/* Tarih Seçimli Günlük İstatistik Raporu */}
+                <ReportCard title="Günlük İstatistikler (Tarih Seçimli)" icon={CalendarDays} isLoading={loadingSeciliGunlukRapor} error={seciliGunlukRaporHata} onFetch={fetchSeciliGunlukRapor}>
+                    <div className="mb-3 text-xs">
+                        <label htmlFor="seciliGunlukRaporTarih" className="block text-slate-600 mb-0.5">Tarih</label>
+                        <input type="date" id="seciliGunlukRaporTarih" value={seciliGunlukRaporTarih} onChange={(e) => setSeciliGunlukRaporTarih(e.target.value)} className="w-full sm:w-auto p-1.5 border border-slate-300 rounded-md"/>
+                    </div>
+                    {seciliGunlukRaporData && (
+                        <div className="space-y-1 text-sm text-slate-700 p-3 bg-blue-50 rounded-md border border-blue-200">
+                            <p><strong>Tarih:</strong> <span className="font-semibold">{new Date(seciliGunlukRaporData.tarih + "T00:00:00").toLocaleDateString('tr-TR')}</span></p>
+                            <p><strong>Sipariş Sayısı:</strong> <span className="font-semibold">{seciliGunlukRaporData.siparis_sayisi}</span></p>
+                            <p><strong>Toplam Gelir:</strong> <span className="font-bold text-green-600">₺{Number(seciliGunlukRaporData.toplam_gelir).toFixed(2)}</span></p>
+                            <p><strong>Satılan Ürün Adedi:</strong> <span className="font-semibold">{seciliGunlukRaporData.satilan_urun_adedi}</span></p>
+                            <p><strong>Nakit Gelir:</strong> <span className="font-semibold">₺{Number(seciliGunlukRaporData.nakit_gelir).toFixed(2)}</span></p>
+                            <p><strong>Kredi Kartı Geliri:</strong> <span className="font-semibold">₺{Number(seciliGunlukRaporData.kredi_karti_gelir).toFixed(2)}</span></p>
+                            <p><strong>Diğer Ödeme Yönt. Geliri:</strong> <span className="font-semibold">₺{Number(seciliGunlukRaporData.diger_odeme_yontemleri_gelir).toFixed(2)}</span></p>
+                        </div>
+                    )}
+                     {!seciliGunlukRaporData && !loadingSeciliGunlukRapor && !seciliGunlukRaporHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için tarih seçip butona tıklayın.</p>}
+                </ReportCard>
+
+                {/* Yıl/Ay Seçimli Aylık İstatistik Raporu */}
+                <ReportCard title="Aylık İstatistikler (Yıl/Ay Seçimli)" icon={PieChartIcon} isLoading={loadingSeciliAylikRapor} error={seciliAylikRaporHata} onFetch={fetchSeciliAylikRapor}>
+                    <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
+                        <div>
+                            <label htmlFor="seciliAylikRaporYil" className="block text-slate-600 mb-0.5">Yıl</label>
+                            <select id="seciliAylikRaporYil" value={seciliAylikRaporYil} onChange={(e) => setSeciliAylikRaporYil(parseInt(e.target.value))} className="w-full p-1.5 border border-slate-300 rounded-md bg-white">
+                                {[...Array(5)].map((_, i) => { const year = new Date().getFullYear() - i; return <option key={year} value={year}>{year}</option>; })}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="seciliAylikRaporAy" className="block text-slate-600 mb-0.5">Ay</label>
+                            <select id="seciliAylikRaporAy" value={seciliAylikRaporAy} onChange={(e) => setSeciliAylikRaporAy(parseInt(e.target.value))} className="w-full p-1.5 border border-slate-300 rounded-md bg-white">
+                                {Array.from({length: 12}, (_, i) => i + 1).map(month => <option key={month} value={month}>{new Date(0, month-1).toLocaleString('tr-TR', { month: 'long' })}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                     {seciliAylikRaporData && (
+                        <div className="space-y-1 text-sm text-slate-700 p-3 bg-blue-50 rounded-md border border-blue-200">
+                            <p><strong>Ay:</strong> <span className="font-semibold">{seciliAylikRaporData.ay}</span></p>
+                            <p><strong>Sipariş Sayısı:</strong> <span className="font-semibold">{seciliAylikRaporData.siparis_sayisi}</span></p>
+                            <p><strong>Toplam Gelir:</strong> <span className="font-bold text-green-600">₺{Number(seciliAylikRaporData.toplam_gelir).toFixed(2)}</span></p>
+                            <p><strong>Satılan Ürün Adedi:</strong> <span className="font-semibold">{seciliAylikRaporData.satilan_urun_adedi}</span></p>
+                        </div>
+                    )}
+                    {!seciliAylikRaporData && !loadingSeciliAylikRapor && !seciliAylikRaporHata && <p className="text-sm text-slate-400 italic">Raporu görüntülemek için yıl/ay seçip butona tıklayın.</p>}
+                </ReportCard>
+
+            </div>
+        )}
+      </section>
+
 
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <h3 className="text-xl font-semibold mb-6 text-slate-700 flex items-center gap-3">
@@ -868,7 +1283,7 @@ function AdminPaneli() {
                 <div>
                   <label htmlFor="silUrunAdi" className="sr-only">Silinecek Ürün Adı</label>
                   <input type="text" id="silUrunAdi" value={silUrunAdi} onChange={(e) => setSilUrunAdi(e.target.value)} placeholder="Silinecek ürünün tam adı"
-                         className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 text-sm" required/>
+                          className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 text-sm" required/>
                 </div>
                 <button type="submit" disabled={loadingMenu}
                         className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-md shadow-sm font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:bg-slate-400">
@@ -1043,7 +1458,6 @@ function AdminPaneli() {
         </div>
       </section>
 
-      {/* YENİ EKLENEN: Reçete Yönetimi Bölümü */}
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
           <h3 className="text-xl font-semibold text-slate-700 flex items-center gap-3">
@@ -1093,7 +1507,6 @@ function AdminPaneli() {
           </div>
         )}
       </section>
-      {/* YENİ EKLENEN KISIM SONU */}
 
       <section className="bg-white p-5 sm:p-6 rounded-xl shadow-lg mb-6 md:mb-8">
         <div className="flex flex-wrap justify-between items-center mb-4 gap-2"> <h3 className="text-lg sm:text-xl font-semibold text-slate-700 flex items-center gap-2 sm:gap-3"> <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" /> Kullanıcı Yönetimi </h3> <button onClick={() => { setShowAddUserForm(prev => !prev); if(!showAddUserForm) { setYeniKullanici(initialYeniKullaniciState); setEditingUser(null); } }} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition shadow-sm active:scale-95 flex items-center gap-1.5 sm:gap-2 ${ showAddUserForm ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white" }`}> {showAddUserForm ? <><X size={16}/> Formu Kapat</> : <><UserPlus size={16}/> Yeni Kullanıcı</>} </button> </div>
@@ -1106,7 +1519,7 @@ function AdminPaneli() {
             <CreditCardIcon className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" /> Tüm Siparişler ({filtrelenmisSiparisler.length})
         </h3>
         <input type="text" placeholder="Siparişlerde ara (ID, masa, durum, ürün, tarih...)" value={arama} onChange={(e) => setArama(e.target.value)}
-               className="w-full p-2.5 mb-4 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-400 focus:border-purple-500 transition text-sm"/>
+                className="w-full p-2.5 mb-4 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-400 focus:border-purple-500 transition text-sm"/>
         {loadingDashboardStats && filtrelenmisSiparisler.length === 0 && <p className="text-sm text-slate-500 py-2">Siparişler yükleniyor...</p>}
         {!loadingDashboardStats && filtrelenmisSiparisler.length === 0 && arama === "" && <p className="text-sm text-slate-500 py-2">Henüz hiç sipariş yok.</p>}
         {!loadingDashboardStats && filtrelenmisSiparisler.length === 0 && arama !== "" && <p className="text-sm text-slate-500 py-2">Aramanızla eşleşen sipariş bulunamadı.</p>}
@@ -1207,17 +1620,17 @@ function AdminPaneli() {
               <div>
                   <label htmlFor="yeniUrunAd_modal" className="block text-xs font-medium text-slate-700">Ürün Adı</label>
                   <input type="text" name="ad" id="yeniUrunAd_modal" value={yeniUrun.ad} onChange={(e) => setYeniUrun({...yeniUrun, ad: e.target.value})}
-                         className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required />
+                          className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required />
               </div>
               <div>
                   <label htmlFor="yeniUrunFiyat_modal" className="block text-xs font-medium text-slate-700">Fiyat (₺)</label>
                   <input type="number" name="fiyat" id="yeniUrunFiyat_modal" value={yeniUrun.fiyat} onChange={(e) => setYeniUrun({...yeniUrun, fiyat: e.target.value})}
-                         className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required step="0.01" min="0.01"/>
+                          className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required step="0.01" min="0.01"/>
               </div>
               <div>
                   <label htmlFor="yeniUrunKategori_modal" className="block text-xs font-medium text-slate-700">Kategori Adı</label>
                   <input type="text" name="kategori" id="yeniUrunKategori_modal" value={yeniUrun.kategori} onChange={(e) => setYeniUrun({...yeniUrun, kategori: e.target.value})}
-                         className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required placeholder="Mevcut kategori veya yeni kategori adı"/>
+                          className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500" required placeholder="Mevcut kategori veya yeni kategori adı"/>
                    <p className="text-xs text-slate-500 mt-1">Var olan bir kategoriyi yazabilir veya yeni bir kategori adı girebilirsiniz. Yeni girilirse otomatik oluşacaktır.</p>
               </div>
               <div className="flex justify-end gap-2 pt-3">
@@ -1235,12 +1648,12 @@ function AdminPaneli() {
                 <div>
                     <label htmlFor="edit_kullanici_adi_form_modal" className="block text-xs font-medium text-slate-700">Kullanıcı Adı</label>
                     <input type="text" name="kullanici_adi" id="edit_kullanici_adi_form_modal" value={editingUser.kullanici_adi} onChange={handleEditingUserChange}
-                           className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="3"/>
+                            className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" required minLength="3"/>
                 </div>
                 <div>
                     <label htmlFor="edit_sifre_form_modal" className="block text-xs font-medium text-slate-700">Yeni Şifre (Değişmeyecekse boş bırakın)</label>
                     <input type="password" name="sifre" id="edit_sifre_form_modal" value={editingUser.sifre || ""} onChange={handleEditingUserChange} placeholder="Yeni şifre (en az 6 karakter)"
-                           className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" autoComplete="new-password"/>
+                            className="mt-1 block w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500" autoComplete="new-password"/>
                 </div>
                 <div>
                     <label htmlFor="edit_rol_form_modal" className="block text-xs font-medium text-slate-700">Rol</label>
@@ -1251,7 +1664,7 @@ function AdminPaneli() {
                 </div>
                 <div className="flex items-center pt-1">
                     <input id="edit_aktif_mi_form_modal" name="aktif_mi" type="checkbox" checked={editingUser.aktif_mi} onChange={handleEditingUserChange}
-                           className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"/>
+                            className="h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"/>
                     <label htmlFor="edit_aktif_mi_form_modal" className="ml-2 block text-xs text-slate-700">Aktif Kullanıcı</label>
                 </div>
                 <div className="flex justify-end gap-2 pt-3">
@@ -1297,8 +1710,8 @@ function AdminPaneli() {
                 <div>
                     <label htmlFor="stok_kat_ad_modal" className="block text-xs font-medium text-slate-700 mb-0.5">Kategori Adı</label>
                     <input type="text" id="stok_kat_ad_modal" placeholder="Kategori Adı" value={editingStokKategori.ad || ""}
-                           onChange={(e) => setEditingStokKategori({...editingStokKategori, ad: e.target.value})}
-                           className="w-full p-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-lime-500 focus:border-lime-500" required />
+                            onChange={(e) => setEditingStokKategori({...editingStokKategori, ad: e.target.value})}
+                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-lime-500 focus:border-lime-500" required />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                     <button type="button" onClick={() => {setShowStokKategoriModal(false); setEditingStokKategori(initialEditingStokKategori);}} className="px-3 py-1.5 text-xs bg-slate-200 hover:bg-slate-300 rounded-md font-medium">İptal</button>
@@ -1310,7 +1723,7 @@ function AdminPaneli() {
             </form>
         )}
       </Modal>
-      <Modal isOpen={!!stokKategoriToDelete} onClose={() => setStokKategoriToDelete(null)} title="Stok Kategorisi Silme Onayı">
+       <Modal isOpen={!!stokKategoriToDelete} onClose={() => setStokKategoriToDelete(null)} title="Stok Kategorisi Silme Onayı">
           {stokKategoriToDelete && (
             <div className="text-sm">
                  <p className="text-slate-600 mb-3">'{stokKategoriToDelete.ad}' stok kategorisini silmek istediğinizden emin misiniz? <strong className="text-red-600">Bu kategoriye bağlı stok kalemleri varsa bu işlem başarısız olabilir.</strong></p>
@@ -1343,7 +1756,7 @@ function AdminPaneli() {
                     <label htmlFor="stok_kalem_birim_form_modal" className="block text-xs font-medium text-slate-700 mb-0.5">Birim</label>
                     <input type="text" name="birim" id="stok_kalem_birim_form_modal" placeholder="Birim (örn: kg, lt, adet)" value={editingStokKalemi.birim || ""} onChange={handleStokKalemiFormChange} className="w-full p-2 border border-slate-300 rounded-md" required />
                 </div>
-                {!editingStokKalemi.id && (
+                {!editingStokKalemi.id && ( // Sadece yeni eklerken göster
                     <>
                         <div>
                             <label htmlFor="stok_kalem_mevcut_form_modal" className="block text-xs font-medium text-slate-700 mb-0.5">Mevcut Miktar (Opsiyonel)</label>
@@ -1383,7 +1796,6 @@ function AdminPaneli() {
             </div>
         )}
       </Modal>
-      {/* YENİ EKLENEN: Reçete Modalı */}
       <Modal isOpen={showRecipeModal} onClose={() => {setShowRecipeModal(false); setEditingRecipe(initialEditingRecipeState);}} title={editingRecipe?.id ? "Reçete Düzenle" : "Yeni Reçete Ekle"} size="max-w-3xl">
         {editingRecipe && (
           <form onSubmit={handleSaveRecipe} className="space-y-4 text-sm">
